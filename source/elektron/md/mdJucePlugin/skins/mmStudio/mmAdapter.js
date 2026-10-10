@@ -301,10 +301,11 @@
 	function keyChannel() {
 		const c = chan();
 		if (!c) return null;
-		const ch = V().mode() === "multi" ? c.multiTrig : V().mode() === "map" ? c.multiMap : c.base + V().asgT();
-		return ch >= 0 && ch < 16 ? ch : null;
+		const ch = V().mode() === "multi" ? c.multiTrig : V().mode() === "map" ? c.multiMap : trackChannel(V().asgT());
+		return ch != null && ch >= 0 && ch < 16 ? ch : null;
 	}
-	const trackChannel = t => { const c = chan(); const ch = c ? c.base + t : -1; return ch >= 0 && ch < 16 ? ch : null; };
+	/* B-051: a track's own channel by the machine's rule (base + t inside CHANNEL SPAN, up to channel 15), else null */
+	const trackChannel = t => { const c = chan(); return c ? MmView.trackChannel({ base: c.base <= 15 ? c.base : null, span: c.span }, t) : null; };
 	const midi = (b, key) => send({ op: "midi", b }, key ? { key } : {});
 	let held = null;
 	function noteOff() { if (held) { midi([0x80 | held.ch, held.n, 0]); held = null; } }
@@ -337,6 +338,19 @@
 	}
 
 	/* ---------------- what the plug-in asks, and what it refused ---------------- */
+	/* B-051: the core's refusal of a mute or note on a track the active global gives no channel (mmDeskDelivery.cpp
+	   noChannelReason). One notice, with one key that gives every track its own channel: CHANNEL SPAN 6, and base
+	   channel 1 when the base is OFF or leaves fewer than six channels (channel 16 reaches no track) */
+	const NO_CHANNEL = /no MIDI channel of its own|MIDI base channel is (OFF|16)/;
+	const ownChannels = g => { const c = g?.channels || {}; return Object.assign({ span: 6 }, c.base == null || c.base > 9 ? { base: 0 } : {}); };
+	function noChannel(text) {
+		const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+		V().ask(`<p>${esc(text)}</p>`, [["Give each track its own channel", "cream", () => {
+			send(Object.assign({ op: "globalMidi" }, ownChannels(globalNow())), { onResult: r => V().toast(r.ok
+				? "Each track has its own MIDI channel now (GLOBAL › MIDI). Mutes and notes reach it in a few seconds." : r.errors[0]) });
+			host.commit();
+		}], ["Close", "", () => {}]], "", { key: "noChannel" });
+	}
 	/* {type:"ask", ask, message, confirm, command, alternatives}: its words and its keys; confirm sends the
 	   command again with force; an alternative ("Save and load") sends its first commands, then the same
 	   (as the Machinedrum Editor's onAsk) */
@@ -478,7 +492,7 @@
 		sendNow() { send({ op: "hwSend" }, { onResult: r => V().toast(r.ok ? r.note : r.errors[0]) }); },
 		playKey(n) {
 			const ch = keyChannel();
-			if (ch == null) { V().setKeyDown(n, "That MIDI channel is OFF in the global (GLOBAL › MIDI › CHANNELS)."); return; }
+			if (ch == null) { V().setKeyDown(n, "No MIDI channel for this in the active global: GLOBAL › MIDI (the GLOBAL key)."); return; }
 			if (held && held.n === n && held.ch === ch) return;
 			noteOff();
 			midi([0x90 | ch, n, 100]);
@@ -490,6 +504,8 @@
 		/* the home row, the piano roll's and the transpose keyboard's keys: the note intent, as on the MD
 		   (noteOn / noteOff, mm-data-contract.md). The core plays synth track t's note on its own MIDI channel
 		   (GLOBAL › MIDI › CHANNELS: base + t, while t < span) and says why not when it cannot */
+		/* B-051, F3: GLOBAL's slot keys (SET ACTIVE GLOBAL); the machine document says which is active */
+		globalSlot(n) { send({ op: "globalSlot", slot: n }, { onResult: r => V().toast(r.ok ? r.note : r.errors[0]) }); },
 		noteOn(t, pitch, vel) { send({ op: "noteOn", t, vel, pitch }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } }); },
 		noteOff(t, pitch) { send({ op: "noteOff", t, pitch }); },
 		joy(xy) { joySend(xy.x, xy.y); },
@@ -635,6 +651,8 @@
 			log("followHost refused: " + t);
 			if (t !== last.hostRefused) { last.hostRefused = t; V().toast("The machine could not be set to follow the DAW's tempo: " + t); }
 		}
+		/* B-051: a mute or note refused because the track has no MIDI channel of its own: the notice offers the fix */
+		else if (m.type === "result" && !m.ok && m.errors?.length && NO_CHANNEL.test(m.errors[0])) noChannel(m.errors[0]);
 		/* a refused noticeAnswer is the log's only (noticeRefused): nothing for the user to do */
 		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet"
 			&& m.op !== "noticeAnswer") V().toast(m.errors[0]);

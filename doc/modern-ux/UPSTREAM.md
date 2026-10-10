@@ -50,9 +50,7 @@ in a file he owns is a future conflict; a file we add is not.
 | `mdLib/mddevice.h`, `.cpp` | the `beginStateCapture` override (defined in our `mdLib/mdstatecapture.cpp`); `getState` is a capture encoded at once | the device's state and its members are upstream's |
 | `mdLib/mdhardware.h`, `.cpp` | the ROM held as `shared_ptr<const Rom>` (`sharedRom()`); `factoryFlashBaseline()` and `m_factoryBaseline` (defined in our `mdLib/mdfactorybaseline.cpp`); the captured factory image held by `shared_ptr` (shared with a save, not copied); `replaceFactoryFlashCache` keeps the baseline it decoded; the flash exchange swaps it; the include | a save that encodes without the lock keeps the ROM and the baseline alive after the device swapped its Hardware, and decodes the factory cache once instead of at every save |
 | `mdLib/mdstate.h`, `.cpp` | `crc32` declared; the CRC-32 by tables (slicing by eight, the same values) | the state and cache formats' checksum, 15 times faster |
-| `networkLib/tcpServer.h`, `.cpp`, `tcpStream.h`, `.cpp` | `BindScope` (the bridge binds every interface as before, the MCP server 127.0.0.1); the accept thread catches `std::exception`; `TcpStream::interrupt()` and `setReadTimeout()` | the MCP server must not listen on the LAN; a thread or memory failure must not end the host; a blocked client thread must be woken at shutdown |
 | `mcpServerLib/httpServer.h`, `.cpp`, `httpResponse.h`, `mcpServer.h`, `.cpp`, `mcpPluginServer.h`, `.cpp` | loopback, the Host and Origin check (our `httpGuard.h`), no CORS (`setCorsHeaders` gone); clients reaped and capped, request limits, an idle read timeout (a constructor argument for the tests), shutdown that interrupts the clients and wakes the SSE wait; tool handlers run outside the tools mutex; `send_note`'s duration clamped (`noteDurationMs`) | his MCP server (codex review 2026-10, items 11 and 12): a web page or another machine could drive it, and it could hang the host at shutdown |
-| `bridge/bridgeLib/commandReader.cpp`, `commands.cpp`, `error.h`, `tcpConnection.h`, `.cpp`, `types.h`; `bridge/client/deviceConnection.h`, `.cpp`; `bridge/server/clientConnection.h`, `.cpp`, `romPool.h`, `.cpp` | sizes, counts and enum values from the peer checked (`g_maxCommandSize`); an exception on the receive thread ends that connection; the receive thread started by the most derived constructor (`final`); the missing `return` after a ROM hash mismatch; the ROM cache named by the hash, written exclusively, 1 byte to 16 MiB, kept in memory when the file cannot be written, the peer's name logged sanitised | his DSP bridge (codex review 2026-10, items 9 and 10): a peer could write past buffers, write files outside the ROM folder, or end the process |
 | `.github/workflows/mdmm-core.yml`, `scripts/macos/build_mdmm.sh`, `scripts/windows/build_mdmm.ps1` | our test names in his lists of test targets and ctest patterns | our CI runs his scripts and his core workflow; the tests the fork carries (`upstreamTests/`, `mdStateCaptureTest`, `mdProcessorHooksTest`) must run there too |
 | `doc/mcp_server.md` | loopback, the Host and Origin check, the limits and the accepted risk (no authentication); the `exit` tool removed (the code no longer has it) | his document of his server |
 
@@ -74,10 +72,10 @@ cache and Ninja come in through the environment, not through his files), and no 
 (`main`, `release/md-mm-*`), each a second build on a push to our `main` that nothing waits for; turning them off for
 this fork is a repository setting (`gh workflow disable`), not an edit of his files.
 
-The tests the fork carries for his code (the DSP bridge, networkLib, the MCP server, synthLib's wrapper) are in
-`source/elektron/md/upstreamTests/`, added from `mdmmEditors.cmake`: no line in his CMakeLists, and his
-`EXCLUDE_FROM_ALL` on `networkLib`, `bridgeLib` and `mcpServerLib` stays (a test that needs one builds it as a
-dependency). `mcpServerTest` needs juce_core and is declared with the JUCE tests in `mdmmPlugins.cmake`. Tests of
+The tests the fork carries for his code (synthLib's wrapper) are in `source/elektron/md/upstreamTests/`, added from
+`mdmmEditors.cmake`. The DSP bridge (`bridge/`, `networkLib/`, `ptypes/`), the MCP server and their tests were
+deleted in 0.5; a project saved with the bridge's remote device (the `REMO` chunk) loads on the local device
+(`jucePluginLib/processor.cpp`, proven by `mdProcessorHooksTest`). Tests of
 ours that once were appended to his test files are files of ours: `mdLibTest/mdStateCaptureTest.cpp`,
 `mdJucePlugin/mdProcessorHooksTest.cpp`, `upstreamTests/synthLibStateCaptureTest.cpp` and
 `upstreamTests/synthLibMidiQueueTest.cpp`. The state capture and the factory baseline are `mdLib/mdstatecapture.*`
@@ -110,11 +108,6 @@ go:
 - **to dsp56300/gearmulator** (the shared code; joelanders merges it from there):
   - `synthLib/plugin.cpp`: the MIDI ring checked again under the process lock before `addMidiEvent` pops (one `if`).
   - `jucePluginLib/processor.cpp`: `requestLatencyUpdate()` after a resampler mode or device rate change.
-  - the DSP bridge: the command size limit, the audio count and enum checks, exceptions on the receive thread, the
-    receive thread started after construction, the ROM cache named by its hash. dsp56300's `main` has changed
-    `bridge/bridgeLib/tcpConnection.cpp` and `bridge/server/clientConnection.cpp` since (a send mutex, a protocol
-    version check, the same missing `return`): the sync that brings it conflicts there; take that side and put ours
-    back.
   - the MCP server: loopback and the Host and Origin check without CORS; `httpServer`'s shutdown, reaping, limits
     and idle timeout; the SSE wait woken by `stop()`; tool handlers outside the mutex; the `send_note` clamp; the
     accept thread's `std::exception` catch in `networkLib`.

@@ -23,7 +23,6 @@ set(SOURCES
 	settingsCategory.cpp settingsCategory.h
 	settingsDeviceSpecific.cpp settingsDeviceSpecific.h
 	settingsDspAudio.cpp settingsDspAudio.h
-	settingsDspBridge.cpp settingsDspBridge.h
 	settingsGui.cpp settingsGui.h
 	settingsMidi.cpp settingsMidi.h
 	settingsMidiLearn.cpp settingsMidiLearn.h

@@ -6,7 +6,7 @@
 /* ---- Alt, a global modifier: Alt + CLR (or Alt + Delete in Sequence) clears the whole pattern, Alt + the lock
    lane's clear key every lock of the selected track. While Alt is held the keys it changes say so. ---- */
 S.alt=false;
-function altLabels(){const c=$('[data-sec="clear"]');if(c){c.textContent=S.alt?"All":"Clr";c.title=S.alt?`Clear the whole pattern ${patName(S.pat)}: every track's notes, slides and locks (one undo step)`:"Clear (Delete). Alt: the whole pattern"}
+function altLabels(){const c=$('[data-sec="clear"]');if(c){c.textContent=S.alt?"All":"Clr";if(S.alt)c.title=`Clear the whole pattern ${patName(S.pat)}: every track's notes, slides and locks (one undo step)`}secLabels();
  const cl=$("#clearLane");if(cl){const t=S.alt?`Clear every lock of ${tLabel(S.sel)}`:`Clear ${pidLabel(S.sel,S.lane)} locks. Alt: every lock of ${tLabel(S.sel)}`;cl.title=t;cl.setAttribute("aria-label",t)}}
 /* Alt seen up (any key or pointer event without it) also ends a rotate run: its keyup may never reach the page */
 function showAlt(on){if(S.alt===on)return;S.alt=on;if(!on)rotHold=false;document.body.classList.toggle("althold",on);altLabels();if(S.gen&&S.ws==="seq")genDraw();if(S.gen&&S.ws==="sound")renderMutStrip()}
@@ -33,8 +33,9 @@ function rotateTrack(by){const t=S.sel,tr=trk(t),len=S.len;if(len<2)return;
  for(const[k,m] of S.locks){if(+k.split("|")[0]!==t)continue;const n=new Map();for(const[s,v] of m)n.set(s<len?rotStep(s,by,len):s,v);S.locks.set(k,n)}
  rotHold=true;edit("rotate",{t,by});rerenderSeq()}
 
-/* ---- every-N fill: ⌘-click a step in the roll, every 2nd step from there to the end gets a note at that pitch
-   (⌘⇧: every 4th); from a step with a note they go off, with their locks. A NOTE OFF is left alone. ---- */
+/* ---- every-N fill: the step menu's Fill every 2nd / 4th from here (K7; it was ⌘-click in the roll, ⌘ selects now):
+   every 2nd step from there to the end gets a note at that pitch (the row right-clicked, or the track's last);
+   from a step with a note they go off, with their locks. A NOTE OFF is left alone. ---- */
 function fillEvery(t,s,n,pitch){const tr=trk(t),end=S.len,on=!(tr.steps[s]&&!tr.steps[s].off);let ch=0;
  for(let k=s;k<end;k+=n){const st=tr.steps[k];if(st?.off)continue;if(on&&!st){tr.steps[k]=note(pitch);ch++}else if(!on&&st){tr.steps[k]=null;tr.slide.delete(k);clearStepLocks(t,k);ch++}}
  const nth=n===2?"2nd":"4th";if(!ch){toast(`${tLabel(t)} already has every ${nth} step ${on?"on":"off"} from step ${s+1}.`);return}
@@ -129,14 +130,12 @@ Keys.bind({id:"velocity",scope:"any",keys:["C","V"],group:"Playing",does:()=>`Ve
 /* ---- the selected track's keys, the all keys, the step gestures ---- */
 Keys.bind({id:"mute-track",scope:"any",keys:["M"],code:"KeyM",group:"Selected track",does:"Mute or unmute the selected track",when:kbOn,run:()=>muteSel()});
 Keys.bind({id:"mute-all",scope:"any",keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
-Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
- when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
+Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
+ when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{if(selKeys()){selMove(e.key==="ArrowDown"?1:-1,0);return}const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
 Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here)",when:kbOn,run:()=>tapTempo()});
 Keys.bind({id:"rotate",scope:"seq",keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
 Keys.bind({id:"unmute-all",scope:"any",keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
 Keys.bind({id:"unmark-paste",scope:"seq",keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});
-Keys.bind({id:"roll-fill-2",scope:"seq",area:"Roll",keys:["roll"],mod:"cmd",group:"Sequence",does:"Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step"});
-Keys.bind({id:"roll-fill-4",scope:"seq",area:"Roll",keys:["roll"],mod:"cmd+shift",group:"Sequence",does:"Click: every 4th step from there to the end"});
 Keys.bind({id:"lockstep-wheel",scope:"seq",area:"Lock lane",keys:["wheel on a lock step"],group:"Sequence",does:"Move its lock in the lane's parameter, 4 a notch (⇧: 1)"});
 Keys.bind({id:"lane-ramp",scope:"seq",area:"Lock lane",keys:["lock lane"],mod:"shift",group:"Sequence",does:"Drag: a ramp, a straight line from the press to the release (one undo step)"});
 Keys.bind({id:"track-mark-paste",scope:"seq",area:"Tracks",keys:["track header"],mod:"shift",group:"Sequence",does:"Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)"});

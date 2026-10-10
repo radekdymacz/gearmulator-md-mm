@@ -277,3 +277,13 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 
 /* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
 @media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}
+
+/* selected steps (77-select.js, DESIGN-step-selection.md §7): the ruler's numbers, the selected track's trig rows,
+   the rail's tracks in the selection; the roll draws its own (drawSel); a drop's target dashed; the LCD's COPY CLR
+   PASTE marked while they take the selection */
+#seq .rul.selx{color:var(--print);font-weight:700;box-shadow:inset 0 -3px 0 var(--print)}
+#seq .tlane .tc.selx{outline:2px solid var(--print);outline-offset:-1px}
+#seq .tlane .tc.selghost{outline:2px dashed var(--print);outline-offset:-1px}
+.th.selt{box-shadow:inset 3px 0 0 var(--print)}
+.th.selt.marked{box-shadow:inset 3px 0 0 var(--print),inset 0 0 0 2px var(--led)}
+.lcdsec button.onsel{opacity:1;text-decoration:underline;text-underline-offset:2px}

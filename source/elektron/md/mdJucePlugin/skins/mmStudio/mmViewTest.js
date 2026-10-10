@@ -60,7 +60,7 @@ function page() {
 	const hold = "\n;const __start = window.MMHost.start; window.MMHost.start = () => { };\n";
 	const src = FILES.map(f => fs.readFileSync(f, "utf8").replace(/^"use strict";/, "") + (/mmAdapter/.test(f) ? hold : "")).join("\n;\n")
 		+ "\n;__start();\nreturn { S: () => S, Overlay, MmView, docStore, storeDoc, MM_SEAM, Dlg, Banner, mockup: { " +
-			"mutApply, genLive, genEnd, setMachine, songAction, secAction } };";
+			"mutApply, genLive, genEnd, setMachine, songAction, secAction, setSel, clearSel, selCut, selDuplicate, selTrigs, selMark, selMove, selGrow, stepMenuItems, Keys, HOST } };";
 	const out = new Function("scope", "with (scope) {\n" + src + "\n}")(scope);
 	const run = () => { for (let n = 0; timers.length && n < 10000; n++) timers.shift()(); };
 	run();
@@ -365,6 +365,61 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	r.recv([{ type: "machine", doc: machine({ input: false }) }, { type: "machine", doc: machine({ input: true }) }]);
 	r.recv([{ type: "mod", doc: theirs, values: [64], ccPerSecond: 0 }]);
 	check(r.win.MMView.ctlSetup().sources.some(x => x.id === "R9"), "not ready -> ready: the plug-in's setup is taken");
+}
+
+/* ---- K7 (DESIGN-step-selection.md §7): selected steps send the core's block intents, as the Machinedrum page does ---- */
+{
+	const p = loaded(), S = p.S(), M = p.mockup;
+	const sentOps = () => p.sent.filter(m => /Steps|steps|slide|step$/.test(m.op || ""));
+	const args = m => m.op + " " + JSON.stringify(Object.fromEntries(Object.entries(m).filter(([k]) => !["op", "id", "g", "p"].includes(k))));
+	const take = () => { p.run(); const o = sentOps(); p.sent.length = 0; return o; };
+	S.ws = "seq"; S.sel = 0;
+	M.setSel({ t: 0, n: 1, from: 2, to: 3 }); take();
+	M.secAction("copy");
+	let o = take();
+	check(o.length === 1 && args(o[0]) === 'copySteps {"t":0,"n":1,"from":2,"to":3}' && o[0].p === S.pat, "a selected step and ⌘C (the LCD's COPY): copySteps of that step: " + o.map(args).join("; "));
+	M.setSel({ t: 1, n: 1, from: 6, to: 7 });
+	M.secAction("paste");
+	o = take();
+	check(o.length === 1 && args(o[0]) === 'pasteSteps {"t":1,"from":6}' && JSON.stringify(S.stepSel) === '{"t":1,"n":1,"from":6,"to":7}', "another step selected and ⌘V: pasteSteps there; the selection is what landed: " + o.map(args).join("; "));
+	M.setSel({ t: 0, n: 2, from: 0, to: 4 });
+	M.selDuplicate();
+	o = take();
+	check(o.length === 1 && args(o[0]) === 'copyStepsTo {"t":0,"n":2,"from":0,"to":4,"at":4,"dt":0}' && S.stepSel.from === 4 && S.stepSel.to === 8, "⌘D: copyStepsTo right after the block, the selection on the copy: " + o.map(args).join("; "));
+	M.selCut();
+	o = take();
+	check(o.length === 2 && args(o[0]) === 'copySteps {"t":0,"n":2,"from":4,"to":8}' && args(o[1]) === 'clearSteps {"t":0,"n":2,"from":4,"to":8}' && o[0].g === o[1].g, "⌘X: copySteps then clearSteps in one gesture (one undo step): " + o.map(args).join("; "));
+	M.setSel({ t: 6, n: 1, from: 0, to: 1 });
+	M.secAction("paste");
+	check(!take().length, "a synth block onto a MIDI track: nothing sent (it says so)");
+	M.secAction("clear");
+	o = take();
+	check(o.length === 1 && args(o[0]) === 'clearSteps {"t":6,"n":1,"from":0,"to":1}', "the LCD's CLR with a selection: clearSteps of it: " + o.map(args).join("; "));
+	M.clearSel();
+	M.Keys.byId("delete").run();
+	check(!take().length && !S.stepSel, "Delete with nothing selected clears nothing (D3)");
+	M.setSel({ t: 0, n: 1, from: 0, to: 2 }); S.tracks[0].steps[0] = null; S.tracks[0].steps[1] = null;
+	M.selTrigs();
+	o = take();
+	check(o.length === 1 && o[0].op === "steps" && o[0].rows[0].steps.length === 2 && o[0].from === 0 && o[0].to === 2, "Enter: notes on the selected empty steps, one steps intent: " + o.map(args).join("; "));
+	M.selMove(0, 1);
+	check(JSON.stringify(S.stepSel) === '{"t":0,"n":1,"from":1,"to":3}', "→ moves the selection a step: " + JSON.stringify(S.stepSel));
+	M.selGrow(1);
+	check(JSON.stringify(S.stepSel) === '{"t":0,"n":1,"from":1,"to":4}', "⇧→ extends it: " + JSON.stringify(S.stepSel));
+	M.selMove(1, 0);
+	check(S.stepSel.t === 1 && S.sel === 1, "↓ moves a one-track selection a track; the selected track follows");
+	M.setSel({ t: 5, n: 1, from: 0, to: 1 }); M.selMove(1, 0);
+	check(S.stepSel.t === 5, "↓ stays on the side shown (T6 is the last synth track)");
+	const ids = items => items.filter(i => typeof i !== "string").map(i => i.id).join(" ");
+	M.setSel({ t: 0, n: 1, from: 0, to: 1 }); S.tracks[0].steps[0] = { n: [48], a: 1, f: 1, l: 1 };
+	check(ids(M.stepMenuItems(0, 0, 50)) === "sel-trigs step-note-off step-trigless step-slide step-chord copy cut paste duplicate delete step-fill-2 step-fill-4", "the step menu on a synth note (roll, another pitch): " + ids(M.stepMenuItems(0, 0, 50)));
+	check(ids(M.stepMenuItems(6, 0)) === "sel-trigs step-note-off step-slide copy cut paste duplicate delete step-fill-2 step-fill-4", "on a MIDI track: no trigless, no chord without a pitch");
+	const k = M.Keys.byId("cut"), dup = M.Keys.byId("duplicate"), all = M.Keys.byId("select-all");
+	check(k && k.mod === "cmd" && dup && dup.mod === "cmd" && all && all.mod === "cmd" && M.Keys.byId("step-menu") && !M.Keys.byId("roll-fill-2"), "the keys: ⌘X ⌘D ⌘A and the step menu (the fill moved there from ⌘-click)");
+	all.run();
+	check(JSON.stringify(S.stepSel) === JSON.stringify({ t: 0, n: 6, from: 0, to: S.len }), "⌘A: every step of the six tracks shown: " + JSON.stringify(S.stepSel));
+	M.Keys.byId("deselect").run();
+	check(!S.stepSel, "Esc: no selection");
 }
 
 /* ---- the intent cases: the page's optimistic writes are the core's edit (DESIGN-UNIFY.md 4.2) ---- */

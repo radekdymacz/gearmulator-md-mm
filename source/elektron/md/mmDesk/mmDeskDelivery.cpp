@@ -15,18 +15,25 @@ namespace mmDesk
 
 	namespace
 	{
-		// The kit fields a live SysEx or CC reaches (everything else needs a dump).
-		ed::MmKit liveFields(ed::MmKit _k)
+		// The kit fields a live SysEx, CC or NRPN reaches (everything else needs a dump): a track's values and level only
+		// on its own MIDI channel, the MIDI page and MULTI ENV only on the base channel (B-051).
+		ed::MmKit liveFields(ed::MmKit _k, const ChannelReach& _reach)
 		{
 			_k.name = {};
-			_k.levels = {};
 			_k.machines = {};
 			_k.routing = {};
-			for(auto& t : _k.tracks)
+			for(size_t t = 0; t < _k.tracks.size(); ++t)
 			{
-				t.pages = {};
-				t.midi = {};
-				t.multiEnv = {};
+				if(_reach.track[t])
+				{
+					_k.levels[t] = 0;
+					_k.tracks[t].pages = {};
+				}
+				if(_reach.nrpn)
+				{
+					_k.tracks[t].midi = {};
+					_k.tracks[t].multiEnv = {};
+				}
 			}
 			return _k;
 		}
@@ -36,14 +43,8 @@ namespace mmDesk
 
 	MmMachine::Review MmMachine::review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view)
 	{
-		for(const auto& c : _changes)
-		{
-			if(c.ref().kind != Kind::Global || static_cast<int>(c.ref().slot) != m_curGlobal)
-				continue;
-			const auto it = _view.globals.find(c.ref().slot);
-			if(it != _view.globals.end() && std::get<ed::MmGlobal>(c.after).baseChannel != it->second.baseChannel)
-				return refuse("The editor talks to the machine on the active global's base channel; change it on the machine.");
-		}
+		// B-051: the active global's base channel may change (the GLOBAL page): the editor's channel messages wait until
+		// the machine has it (setBaseChannel), its SysEx never depends on it.
 		// The library's slot writes that lose something ask first (the page sends them again with force), as the
 		// Machinedrum's: clearing a slot; writing over a kit that has a name, over the kit that plays (it is loaded
 		// too, its unsaved edits go), or over a pattern with trigs.
@@ -76,7 +77,42 @@ namespace mmDesk
 		return Review(o);
 	}
 
-	Outcome MmMachine::submit(const Change& _change, const Intent&, const Documents&)
+	ChannelReach ChannelReach::of(const ed::MmGlobal* _global)
+	{
+		ChannelReach r;
+		if(!_global)
+			return r;
+		for(uint8_t t = 0; t < 6; ++t)
+			r.track[t] = ed::mmTrackChannel(*_global, t).has_value();
+		r.nrpn = ed::mmBaseChannelOn(*_global);
+		return r;
+	}
+
+	ChannelReach MmMachine::reach(const Documents& _view) const
+	{
+		if(clock() < m_channelsSettleUntilMs)
+			return ChannelReach::none();
+		return ChannelReach::of(activeGlobal(_view, m_curGlobal));
+	}
+
+	std::string MmMachine::noChannelReason(const Documents& _view, const int _t) const
+	{
+		const auto* g = activeGlobal(_view, m_curGlobal);
+		if(!g)
+			return {};
+		const auto where = " (GLOBAL " + std::to_string(g->position + 1) + " › MIDI: the GLOBAL page, or GLOBAL › MIDI › CHANNELS on the machine)";
+		if(!ed::mmBaseChannelOn(*g))
+			return std::string("The machine's MIDI base channel is ") + (g->baseChannel > 15 ? "OFF" : "16, which reaches no track")
+				+ ": it takes no mutes or notes over MIDI" + where + ".";
+		if(_t >= 0 && _t < 6 && !ed::mmTrackChannel(*g, static_cast<uint8_t>(_t)))
+			return "T" + std::to_string(_t + 1) + " has no MIDI channel of its own: base channel " + std::to_string(g->baseChannel + 1)
+				+ ", CHANNEL SPAN " + std::to_string(g->channelSpan) + where + ", so the machine takes no mute or note for it over MIDI.";
+		if(clock() < m_channelsSettleUntilMs)
+			return "The machine's MIDI channels just changed; try again in a moment.";
+		return {};
+	}
+
+	Outcome MmMachine::submit(const Change& _change, const Intent&, const Documents& _view)
 	{
 		const auto ref = _change.ref();
 		m_recv.touch();
@@ -115,7 +151,7 @@ namespace mmDesk
 			if(after.position != m_curKit)
 				return refuse("Only the kit that plays can be edited live");
 			std::vector<std::string> notes;
-			deliverKitLive(before, after, notes);
+			deliverKitLive(before, after, reach(_view), notes);
 			// Pending until memory shows it (or it is too old to wait for); without memory nothing
 			// reads it back: done as sent.
 			if(m_profile.memory)
@@ -131,21 +167,23 @@ namespace mmDesk
 		return ok();
 	}
 
-	void MmMachine::deliverKitLive(const ed::MmKit& _from, const ed::MmKit& _to, std::vector<std::string>& _notes)
+	void MmMachine::deliverKitLive(const ed::MmKit& _from, const ed::MmKit& _to, const ChannelReach& _reach, std::vector<std::string>& _notes)
 	{
-		sendKitLive(_from, _to);
-		// What no live message reaches: a kit dump to the current slot, then LOAD KIT.
-		if(ed::mmKitRaw(liveFields(_from)) != ed::mmKitRaw(liveFields(_to)))
+		sendKitLive(_from, _to, _reach);
+		// What no live message reaches: a kit dump to the current slot, then LOAD KIT. Paced as every dump (latest wins).
+		if(ed::mmKitRaw(liveFields(_from, _reach)) != ed::mmKitRaw(liveFields(_to, _reach)))
 		{
 			auto k = _to;
 			k.position = static_cast<uint8_t>(m_curKit);
 			const Ref slot{Kind::Kit, k.position};
 			loadKitAfter(slot, pushDump(slot, ed::encodeMmKit(k)));
-			_notes.push_back("Written to the kit slot and loaded (no live SysEx for this setting).");
+			const bool channel = ed::mmKitRaw(liveFields(_from, {})) == ed::mmKitRaw(liveFields(_to, {}));
+			_notes.push_back(channel ? "Written to the kit slot and loaded (the track has no MIDI channel of its own in the active global)."
+				: "Written to the kit slot and loaded (no live SysEx for this setting).");
 		}
 	}
 
-	void MmMachine::sendKitLive(const ed::MmKit& _from, const ed::MmKit& _to)
+	void MmMachine::sendKitLive(const ed::MmKit& _from, const ed::MmKit& _to, const ChannelReach& _reach)
 	{
 		if(_from.name != _to.name)
 		{
@@ -162,12 +200,17 @@ namespace mmDesk
 				m_port.sendSysex(ed::mmAssignMachine(t, _to.machines[t], 0));
 			if(_from.routing[t] != _to.routing[t])
 				m_port.sendSysex(ed::mmSetRouting(t, ed::mmRoutingOutputs(_to.routing[t]), ed::mmRoutingInput(_to.routing[t])));
-			if(_from.levels[t] != _to.levels[t])
-				m_port.sendParam(t, 7, 0, _to.levels[t]);
-			for(uint8_t pg = 0; pg < 7; ++pg)
-				for(uint8_t i = 0; i < 8; ++i)
-					if(_from.tracks[t].pages[pg][i] != _to.tracks[t].pages[pg][i] || (machine && pg == 0))
-						m_port.sendParam(t, pg, i, _to.tracks[t].pages[pg][i]);
+			if(_reach.track[t])
+			{
+				if(_from.levels[t] != _to.levels[t])
+					m_port.sendParam(t, 7, 0, _to.levels[t]);
+				for(uint8_t pg = 0; pg < 7; ++pg)
+					for(uint8_t i = 0; i < 8; ++i)
+						if(_from.tracks[t].pages[pg][i] != _to.tracks[t].pages[pg][i] || (machine && pg == 0))
+							m_port.sendParam(t, pg, i, _to.tracks[t].pages[pg][i]);
+			}
+			if(!_reach.nrpn)
+				continue;
 			for(uint8_t i = 0; i < 8; ++i)
 				if(_from.tracks[t].midi[i] != _to.tracks[t].midi[i])
 					m_port.sendNrpn(t, static_cast<uint8_t>(0x38 + i), _to.tracks[t].midi[i]);
@@ -211,8 +254,10 @@ namespace mmDesk
 		const auto loaded = ed::mmKitAsLoaded(stored->second);
 		if(ed::mmKitRaw(loaded) == ed::mmKitRaw(*working))
 			return;	// clean: the reload changed nothing
-		// Live edits only: what no live message reaches is in the slot already (deliverKitLive wrote it there).
-		sendKitLive(loaded, *working);
+		// Live edits; what no live message reaches is in the slot already (deliverKitLive wrote it there), or, when the
+		// MIDI channels changed since, goes there now.
+		std::vector<std::string> notes;
+		deliverKitLive(loaded, *working, reach(_view), notes);
 		if(!m_profile.memory)
 			return;
 		// From the slot the machine now holds, not from before the edits that were on their way.

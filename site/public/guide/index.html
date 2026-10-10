@@ -146,7 +146,7 @@
       <tr><th scope="row"><kbd>R</kbd></th><td>MD: Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation, a new seed or random hits and rotation<br>MM: Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation: a new seed, or random hits and rotation</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> <kbd>←</kbd> / <kbd>→</kbd></th><td>MD: Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not "all": FUNCTION + arrows on the machine<br>MM: Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not "all": FUNCTION + arrows on the machine</td></tr>
       <tr><th scope="row"><kbd>M</kbd></th><td>Mute or unmute the selected track</td></tr>
-      <tr><th scope="row"><kbd>↑</kbd> / <kbd>↓</kbd></th><td>MD: Select the previous / next track (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track<br>MM: Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)</td></tr>
+      <tr><th scope="row"><kbd>↑</kbd> / <kbd>↓</kbd></th><td>MD: Select the previous / next track (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track<br>MM: Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track</td></tr>
     </tbody></table></div>
 
     <h3>All</h3>
@@ -176,15 +176,15 @@
     <h3>Sequence</h3>
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row"><kbd>Esc</kbd></th><td>Unmark the tracks marked for paste</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>X</kbd></th><td>MD: Cut the selected steps (copy, then clear; one undo step)</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>D</kbd></th><td>MD: Duplicate the selected steps right after themselves (the clipboard stays); again: once more</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>A</kbd></th><td>MD: Select every step of every track up to the length (then ⌘C copies the pattern as a block)</td></tr>
-      <tr><th scope="row"><kbd>←</kbd> / <kbd>→</kbd></th><td>MD: Move the selection a step earlier / later (one step selected: a cursor)</td></tr>
-      <tr><th scope="row"><kbd>⇧</kbd> <kbd>←</kbd> / <kbd>→</kbd></th><td>MD: Extend the selection a step earlier / later</td></tr>
-      <tr><th scope="row"><kbd>Enter</kbd></th><td>MD: The selected steps' trigs on, or off when each has one (one undo step)</td></tr>
-      <tr><th scope="row"><kbd>Esc</kbd></th><td>MD: Clear the step selection</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>X</kbd></th><td>Cut the selected steps (copy, then clear; one undo step)</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>D</kbd></th><td>Duplicate the selected steps right after themselves (the clipboard stays); again: once more</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>A</kbd></th><td>MD: Select every step of every track up to the length (then ⌘C copies the pattern as a block)<br>MM: Select every step of the six tracks shown (synth or MIDI) up to the length (then ⌘C copies them as a block)</td></tr>
+      <tr><th scope="row"><kbd>←</kbd> / <kbd>→</kbd></th><td>Move the selection a step earlier / later (one step selected: a cursor)</td></tr>
+      <tr><th scope="row"><kbd>⇧</kbd> <kbd>←</kbd> / <kbd>→</kbd></th><td>Extend the selection a step earlier / later</td></tr>
+      <tr><th scope="row"><kbd>Enter</kbd></th><td>MD: The selected steps' trigs on, or off when each has one (one undo step)<br>MM: A note on each empty selected step, or, when none is empty, the selected notes off (one undo step)</td></tr>
+      <tr><th scope="row"><kbd>Esc</kbd></th><td>Clear the step selection</td></tr>
       <tr><th scope="row"><kbd>[</kbd> / <kbd>]</kbd></th><td>Previous / next page</td></tr>
-      <tr><th scope="row"><kbd>Delete</kbd> / <kbd>Backspace</kbd></th><td>MD: Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row<br>MM: Clear the page shown of the selected track (Song: delete the row)</td></tr>
+      <tr><th scope="row"><kbd>Delete</kbd> / <kbd>Backspace</kbd></th><td>Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row</td></tr>
     </tbody></table></div>
 
     <h3>Song</h3>
@@ -207,9 +207,9 @@
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>Z</kbd></th><td>Undo</td></tr>
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>Z</kbd></th><td>Redo</td></tr>
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>Y</kbd></th><td>Redo</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>C</kbd></th><td>MD: Copy (Sequence: the selected steps, or the track page shown; Sound: the sound; Song: the row)<br>MM: Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>V</kbd></th><td>MD: Paste (Sequence: at the selected step, the block from its first step and track)<br>MM: Paste (Sequence: into every track marked for paste too)</td></tr>
-      <tr><th scope="row"><kbd>Esc</kbd></th><td>MD: Close the GLOBAL settings</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>C</kbd></th><td>MD: Copy (Sequence: the selected steps, or the track page shown; Sound: the sound; Song: the row)<br>MM: Copy (Sequence: the selected steps, or the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>V</kbd></th><td>MD: Paste (Sequence: at the selected step, the block from its first step and track)<br>MM: Paste (Sequence: at the selected step, the block from its first step and track; into every track marked for paste)</td></tr>
+      <tr><th scope="row"><kbd>Esc</kbd></th><td>Close the GLOBAL settings</td></tr>
       <tr><th scope="row"><kbd>,</kbd></th><td>AUDIO / MIDI settings (also in the engine menu)</td></tr>
     </tbody></table></div>
 
@@ -247,8 +247,10 @@
 
     <h3>Mouse: Roll</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row"><kbd>⌘</kbd> roll</th><td>MM: Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>⇧</kbd> roll</th><td>MM: Click: every 4th step from there to the end</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> step</th><td>MM: Click (roll or trig rows): select the step (⌘V pastes there). Drag: select steps. Drag the selection: a copy where you let go</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>⇧</kbd> step</th><td>MM: Click: extend the selection to the step (on another track's roll: the tracks between too)</td></tr>
+      <tr><th scope="row">step ruler</th><td>MM: Click or drag: select steps of the selected track; ⇧-click extends</td></tr>
+      <tr><th scope="row">right-click a step</th><td>MM: The step menu: note on / off, NOTE OFF, trigless, slide, a chord note (roll), copy, cut, paste here, duplicate, clear, fill every 2nd / 4th from it; on a selected step for the whole selection (Ctrl-click on a Mac)</td></tr>
       <tr><th scope="row"><kbd>⇧</kbd> roll</th><td>MM: Click: a chord note on the step</td></tr>
       <tr><th scope="row">roll</th><td>MM: Click an empty step: a note there; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (one undo step)</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> roll</th><td>MM: Click: delete a note (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step</td></tr>
@@ -292,7 +294,7 @@
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row">tempo</th><td>MD: Drag up or down: the tempo, half a BPM a pixel (⇧: a tenth)</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> CLR</th><td>MD: Click: clear the whole pattern, every track's trigs and locks (one undo step)<br>MM: Click: clear the whole pattern, every track's notes, slides and locks (one undo step)</td></tr>
-      <tr><th scope="row">GLOBAL key</th><td>MD: The machine's own settings, kept in its memory: MIDI channel, sync, the note map, routing (also the engine menu: GLOBAL…)</td></tr>
+      <tr><th scope="row">GLOBAL key</th><td>The machine's own settings, kept in its memory: MIDI channels, sync and the rest (also the engine menu: GLOBAL…)</td></tr>
     </tbody></table></div>
 
     <h3>Mouse: LCD</h3>

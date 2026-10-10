@@ -1,9 +1,9 @@
 "use strict";
 /* v61 (P5): GLOBAL settings (manual pp.57-62, 80-81): the machine's FUNCTION + PATTERN/SONG menu as one panel,
-   opened from the engine menu (GLOBAL…). glob() gives the view, globSend(field, value) changes one
-   setting; both are the host's (example state in the mockup, the desk's documents in the plug-in). What was
+   opened from the engine menu (GLOBAL…). Since B-051 the panel's frame is shared with the Monomachine Editor
+   (skins/shared/deskGlobal.js); this file is the Machinedrum's host of it: glob() gives the view, mdGlobalCards its
+   cards, globSend(field, value) changes one setting. What was
    measured on the firmware is plain; what could not be is marked "not verified". */
-var GP={open:false,note:64};
 const NOTE=n=>["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][n%12]+(Math.floor(n/12)-1);
 /* The MAP EDITOR's targets (measured on the firmware, 0.3.5): 0-15 a track, 16-143 a pattern A01-H16, 144 START,
    145 STOP. The machine keeps any other byte as sent (a backup can hold one); it is shown as its number. */
@@ -19,15 +19,14 @@ const GTIP={
  map:"The note that plays each track. A key maps one function: choosing a used key frees it elsewhere",
  mapNote:"A note mapped to a pattern (A01-H16, GROUP PAT A-H on the machine) or to START / STOP (GROUP CTRL). Pick the note, then what it plays",
  inputs:"The external inputs as trig pads. Shown as stored; they need pads on the inputs, so they are not verified here" };
-function drawGlobal(){const pop=$("#globpop");if(!GP.open){pop.hidden=true;return}const G=glob();if(!G){pop.innerHTML=`<div class="libhead"><span class="cap">Global</span><span class="note">Reading the global settings from the machine…</span><button class="libx" data-ga="close">Esc</button></div>`;pop.hidden=false;placeGlobal();return}
- const tog=(f,on,tip,a="ON",b="OFF")=>`<span class="seg" title="${tip}"><button data-ga="${f}" data-v="1" aria-pressed="${on}">${a}</button><button data-ga="${f}" data-v="0" aria-pressed="${!on}">${b}</button></span>`;
- const step=(f,label,tip)=>`<span class="stepper" title="${tip}"><button data-ga="${f}" data-d="-1" aria-label="Less">−</button><b class="mono">${label}</b><button data-ga="${f}" data-d="1" aria-label="More">+</button></span>`;
+/* the cards of the shared GLOBAL panel (skins/shared/deskGlobal.js draws the frame: the slots, Reset to defaults, the footer) */
+function mdGlobalCards(G){
+ const tog=GlobalUi.tog,step=GlobalUi.step;
  const trackKey=t=>{const n=G.keymap.indexOf(t);return`<div class="gmk key${n<0?" none":""}" title="${GTIP.map}"><small>TRACK ${t+1}</small><span class="stepper"><button data-ga="map" data-t="${t}" data-d="-1" aria-label="Lower note">‹</button><b>${n<0?"--":NOTE(n)}</b><button data-ga="map" data-t="${t}" data-d="1" aria-label="Higher note">›</button></span></div>`};
  const pats=G.keymap.map((v,n)=>v!=null&&v>=16?`${NOTE(n)}→${KTGT(v)}`:null).filter(Boolean);
  const cur=G.keymap[GP.note],tgts=[null,...Array.from({length:146},(_,v)=>v)];if(cur!=null&&!tgts.includes(cur))tgts.push(cur);
  const outs=["A","B","C","D","E","F","MAIN"];
- pop.innerHTML=`<div class="libhead"><span class="cap">Global</span><span class="lcdchip">GLOBAL ${G.slot+1}</span><span class="gslots" title="8 global setups; the lit one is active (SysEx 0x56)">${Array.from({length:8},(_,k)=>`<button data-ga="slot" data-v="${k}" aria-pressed="${k===G.slot}">${k+1}</button>`).join("")}</span><span class="note">FUNCTION + PATTERN/SONG on the machine. A change is stored and made active at once.</span><button class="libx" data-ga="close" title="Close (Esc)">Esc</button></div>
- <div class="globgrid">
+ return`
   <section class="card"><header><h3>Control</h3><span>MIDI</span></header>
    <div class="grow2"><span class="ilab">Base channel</span>${step("base",G.baseChannel>12?"OFF":(G.baseChannel+1)+"–"+(G.baseChannel+4),GTIP.base)}</div>
    <div class="grow2"><span class="ilab">Prg change in</span>${tog("pcIn",G.pcIn,GTIP.pcIn)}</div>
@@ -48,17 +47,8 @@ function drawGlobal(){const pop=$("#globpop");if(!GP.open){pop.hidden=true;retur
    <div class="gmap">${Array.from({length:16},(_,t)=>trackKey(t)).join("")}</div></section>
   <section class="card"><header><h3>Routing</h3><span>track outputs · A–F skip the master effects</span></header>
    <div class="grout">${G.routing.map((o,t)=>`<button class="${o!=="MAIN"?"on":""}" data-ga="route" data-t="${t}" title="Track ${t+1}: ${o==="MAIN"?"main output, through the master effects":"output "+o+", skips the master effects"}. Click for the next output."><small>${t+1}</small><b>${o}</b></button>`).join("")}</div></section>
- </div>
- <div class="libfoot"><span>The GLOBAL key in the top bar or the engine menu opens it · Esc closes · every change is stored on the machine and made active</span><span class="fw" title="The machine keeps 8 global setups">GLOBAL ${G.slot+1} of 8</span></div>`;
- if(typeof enhanceSelects==="function")enhanceSelects(pop);
- pop.hidden=false;placeGlobal()}
-function placeGlobal(){const pop=$("#globpop"),r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
-function globKeyLit(){const k=$("#globkey");if(k){k.setAttribute("aria-pressed",String(GP.open));k.classList.toggle("on",GP.open);k.querySelector(".led")?.classList.toggle("on",GP.open)}}
-function openGlobal(){if(typeof closeLib==="function")closeLib(false);GP.open=true;drawGlobal();globKeyLit()}
-function closeGlobal(){GP.open=false;drawGlobal();globKeyLit()}
-function globalClick(a){const G=glob();if(!G)return;const f=a.dataset.ga,v=a.dataset.v!=null?+a.dataset.v:null,d=a.dataset.d!=null?+a.dataset.d:0;
- if(f==="close"){closeGlobal();return}
- if(f==="slot"){globSend("slot",v);return}
+`}
+function mdGlobalClick(a,G){const f=a.dataset.ga,v=a.dataset.v!=null?+a.dataset.v:null,d=a.dataset.d!=null?+a.dataset.d:0;
  if(f==="base"){globSend("baseChannel",G.baseChannel>12?0:Math.max(0,Math.min(12,G.baseChannel+d)));return}
  if(f==="pcCh"){globSend("programChangeChannel",Math.max(0,Math.min(16,(G.pcChannel||0)+d)));return}
  if(f==="trig"){globSend("trigMode",v);return}
@@ -67,10 +57,6 @@ function globalClick(a){const G=glob();if(!G)return;const f=a.dataset.ga,v=a.dat
  if(f==="map"){const t=+a.dataset.t;let n=G.keymap.indexOf(t);n=n<0?(d>0?0:127):n+d;n=Math.max(0,Math.min(127,n));globSend("keymap",{note:n,target:t});return}
  const map={pcIn:"programChangeIn",pcOut:"programChangeOut",local:"localControl",tempoIn:"tempoIn",ctrlIn:"ctrlIn",tempoOut:"tempoOut",ctrlOut:"ctrlOut"};
  if(map[f])globSend(map[f],v===1)}
-document.addEventListener("click",e=>{if(e.target.closest?.("#globkey")){GP.open?closeGlobal():openGlobal();e.stopPropagation();return}if(!GP.open)return;const pop=$("#globpop");if(pop.contains(e.target)){const a=e.target.closest("[data-ga]");if(a)globalClick(a);return}if(!e.target.closest?.("#dlg,.kpop,#kpop,.lcdeng"))closeGlobal()},true);
-document.addEventListener("change",e=>{const s=e.target.closest?.("#globpop [data-gsel=map]");if(s&&glob())globSend("keymap",{note:GP.note,target:s.value===""?null:+s.value})});
-addEventListener("resize",()=>{if(GP.open)placeGlobal()});
-
 /* The plug-in's side: the view from md-desk/global (its derived "control" view) and the desk's commands. */
 function glob() {
 	const g = Docs.global; if (!g) return null; const c = g.control || {};
@@ -85,5 +71,11 @@ function globSend(f, v) {
 	else cmd("globalSet", { field: f, v });
 }
 Bridge.onMessage(m => { if (GP.open && (m.type === "doc" && m.kind === "global" || m.type === "result" && !m.ok)) setTimeout(drawGlobal, 20); });
-Keys.bind({ id: "global-key", scope: "any", area: "Top bar", keys: ["GLOBAL key"], group: "Anywhere", does: "The machine's own settings, kept in its memory: MIDI channel, sync, the note map, routing (also the engine menu: GLOBAL…)" });
-Keys.bind({ id: "close-global", short: "Close", scope: "any", keys: ["Escape"], group: "Anywhere", does: "Close the GLOBAL settings", when: () => GP.open, run: () => closeGlobal() });
+/* the MD's host of the shared panel */
+DeskGlobal.host = {
+	view: glob, cards: mdGlobalCards, click: mdGlobalClick, menu: "FUNCTION + PATTERN/SONG",
+	change: (s, G) => { if (s.dataset.gsel === "map") globSend("keymap", { note: GP.note, target: s.value === "" ? null : +s.value }); },
+	slot: n => globSend("slot", n),
+	reset: () => cmd("globalReset", {}),
+	ask: (html, yes) => ask(html, [["Reset", "danger", yes], ["Cancel", "", () => { }]])
+};

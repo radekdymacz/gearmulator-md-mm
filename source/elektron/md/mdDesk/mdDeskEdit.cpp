@@ -1,7 +1,10 @@
 #include "mdDeskEdit.h"
+
+#include "elektronData/factoryGlobals.h"
 #include "mdDeskLibrary.h"
 #include "mdDeskModel.h"
 
+#include "deskCore/deskBlocks.h"
 #include "deskCore/deskEdits.h"
 
 #include "elektronData/mdJson.h"
@@ -620,10 +623,12 @@ namespace mdDesk
 			return c;
 		}
 
-		// What a block put down at a step and a track: where it landed, and what did not fit.
+		// What a block put down at a step and a track: where it landed and what did not fit (deskCore::blockLanding),
+		// and the locks skipped.
 		struct Put
 		{
-			size_t rows = 0, steps = 0, cutSteps = 0, cutRows = 0, skippedLocks = 0;
+			deskCore::BlockLanding land;
+			size_t skippedLocks = 0;
 		};
 
 		// Puts a block down with its first step at _at on track _track: each of its rows replaces what the steps
@@ -631,12 +636,9 @@ namespace mdDesk
 		// are in use are skipped (counted).
 		ed::MdPattern putSteps(ed::MdPattern _p, const Clipboard::Steps& _c, const size_t _track, const size_t _at, Put& _put)
 		{
-			const auto end = std::min<size_t>(_at + _c.length, _p.length);
-			_put.steps = end > _at ? end - _at : 0;
-			_put.cutSteps = _c.length - _put.steps;
-			_put.rows = std::min(_c.rows.size(), ed::MdPattern::g_tracks - std::min(_track, ed::MdPattern::g_tracks));
-			_put.cutRows = _c.rows.size() - _put.rows;
-			for(size_t r = 0; r < _put.rows; ++r)
+			_put.land = deskCore::blockLanding(_c.rows.size(), _c.length, _track, _at, ed::MdPattern::g_tracks, _p.length);
+			const auto end = _at + _put.land.steps;
+			for(size_t r = 0; r < _put.land.rows; ++r)
 			{
 				const auto t = _track + r;
 				const auto& row = _c.rows[r];
@@ -672,11 +674,7 @@ namespace mdDesk
 		// "Pasted into ..." and what did not fit, for the result's note.
 		std::string putNote(const std::string& _verb, const Put& _put, const size_t _track, const size_t _at, const ed::MdPattern& _p)
 		{
-			auto note = _verb + " " + tracksName(_track, _put.rows) + ", steps " + std::to_string(_at + 1) + "-" + std::to_string(_at + _put.steps);
-			if(_put.cutSteps)
-				note += ". " + std::to_string(_put.cutSteps) + " step(s) past the pattern's length (" + std::to_string(_p.length) + ") left out";
-			if(_put.cutRows)
-				note += ". " + std::to_string(_put.cutRows) + " track(s) below track 16 left out";
+			auto note = deskCore::blockNote(_verb, tracksName(_track, _put.land.rows), _at, _put.land, _p.length, trackName(ed::MdPattern::g_tracks - 1));
 			if(_put.skippedLocks)
 				note += ". " + std::to_string(_put.skippedLocks) + " lock(s) skipped: all 64 locked parameters are in use";
 			return note;
@@ -1088,9 +1086,16 @@ namespace mdDesk
 			return _g;
 		}
 
+		// B-051, F3: GLOBAL › Reset to defaults: the global the machine ships with, measured (elektronData::mdFactoryGlobal)
+		std::optional<ed::MdGlobal> globalReset(ed::MdGlobal _g, const In&)
+		{
+			return ed::mdFactoryGlobal(_g.position);
+		}
+
 		const Edits<ed::MdGlobal>& globalEdits()
 		{
-			static const Edits<ed::MdGlobal> edits{{"route", route}, {"tempo", tempo}, {"extended", extended}, {"globalSet", globalSet}};
+			static const Edits<ed::MdGlobal> edits{{"route", route}, {"tempo", tempo}, {"extended", extended}, {"globalSet", globalSet},
+				{"globalReset", globalReset}};
 			return edits;
 		}
 

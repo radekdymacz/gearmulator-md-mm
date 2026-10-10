@@ -30,7 +30,6 @@ via HDI08.
 - `juceRmlUi/`, `juceRmlPlugin/`, `juceUiLib/` — RmlUi integration (HTML/CSS-like UI framework)
 - `baseLib/` — Filesystem, logging, events, binary streams
 - `hardwareLib/` — LCD, buttons, encoders abstractions
-- `bridge/`, `networkLib/`, `ptypes/` — upstream's remote-DSP bridge (still linked by jucePluginLib)
 - `pluginTester/`, `midiLearnTest/` — plug-in host and MIDI-learn tests
 
 **Plugin build flow:** `createJucePlugin()` in `source/juce.cmake` (VST3, AU, Standalone), called from

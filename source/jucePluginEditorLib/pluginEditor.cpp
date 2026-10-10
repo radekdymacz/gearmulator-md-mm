@@ -6,7 +6,6 @@
 
 #include "settings.h"
 #include "settingsDspAudio.h"
-#include "settingsDspBridge.h"
 #include "settingsGui.h"
 #include "settingsMidi.h"
 #include "settingsMidiLearn.h"
@@ -830,7 +829,6 @@ namespace jucePluginEditorLib
 		_plugins.push_back(std::make_unique<SettingsMidi>(getProcessor()));
 		_plugins.push_back(std::make_unique<SettingsMidiLearn>(getProcessor()));
 		_plugins.push_back(std::make_unique<SettingsDspAudio>(getProcessor()));
-		_plugins.push_back(std::make_unique<SettingsDspBridge>(getProcessor()));
 	}
 
 	std::string Editor::getSettingsTemplateSuffix() const

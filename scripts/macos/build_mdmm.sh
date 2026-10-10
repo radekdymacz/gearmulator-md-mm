@@ -189,8 +189,6 @@ cmake --build "${build_dir}" --parallel 4 --target \
   pluginTester \
   latency_host \
   baseLibBinaryStreamTest \
-  bridgeLibTest \
-  bridgeServerRomPoolTest \
   synthLibAudioTest \
   synthLibMidiQueueTest \
   mdLibTest \
@@ -239,8 +237,6 @@ fi
 # deskDropPageTest runs under node: CMake registers it only when node is on the PATH, and the loop fails without it.
 for test_name in \
   baseLibBinaryStreamTest \
-  bridgeLibTest \
-  bridgeServerRomPoolTest \
   synthLibAudioTest \
   synthLibMidiQueueTest \
   mdLibTests \

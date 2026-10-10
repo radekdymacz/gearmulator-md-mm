@@ -93,6 +93,7 @@ list(APPEND SOURCES
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
 	skins/mdStudio/mdDeskGlobal.js
+	skins/shared/deskGlobal.js skins/shared/deskGlobal.css
 	skins/mdStudio/mdDeskAudio.js
 	skins/shared/deskModal.js skins/shared/deskModal.css skins/shared/deskModalTest.js skins/shared/deskMenu.js skins/shared/deskMenuTest.js
 	skins/shared/deskCaps.js
@@ -107,6 +108,7 @@ list(APPEND SOURCES
 	skins/shared/deskGen.js skins/shared/deskGenTest.js
 	skins/shared/deskKeys.js skins/shared/deskKeysTest.js skins/shared/deskKeymapTest.js skins/shared/deskKeyView.js skins/shared/deskKeyView.css skins/shared/deskKeyViewTest.js
 	skins/shared/deskTogglePaint.js skins/shared/deskTogglePaintTest.js
+	skins/shared/deskSelect.js skins/shared/deskSelectTest.js
 	skins/shared/deskCompat.js skins/shared/deskCompatTest.js
 	skins/shared/deskZoom.js
 	skins/shared/deskAbout.js skins/shared/deskAboutTest.js)
@@ -140,8 +142,8 @@ option(MDMM_INSTALL_DEV_PLUGINS "Copy the built editors to ~/Library/Audio/Plug-
 set(MD_SHARED_PAGE_FILES
 	"skins/shared/deskModal.js" "skins/shared/deskMenu.js" "skins/shared/deskCaps.js" "skins/shared/deskBoot.js" "skins/shared/deskSyx.js" "skins/shared/deskBridge.js"
 	"skins/shared/deskDrop.js" "skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/shared/deskGen.js"
-	"skins/shared/deskKeys.js" "skins/shared/deskKeyView.js" "skins/shared/deskTogglePaint.js"
-	"skins/shared/deskAudio.js" "skins/shared/deskCompat.js" "skins/shared/deskZoom.js" "skins/shared/deskAbout.js")
+	"skins/shared/deskKeys.js" "skins/shared/deskKeyView.js" "skins/shared/deskTogglePaint.js" "skins/shared/deskSelect.js"
+	"skins/shared/deskAudio.js" "skins/shared/deskGlobal.js" "skins/shared/deskCompat.js" "skins/shared/deskZoom.js" "skins/shared/deskAbout.js")
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/mdDesk.css" "skins/mdStudio/*.js"
 	"skins/mdStudio/fonts/*.woff2" "skins/mdStudio/fonts/*.ttf")
@@ -172,7 +174,7 @@ set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.j
 	"skins/mmStudio/mmViewTest.js" "skins/mmStudio/mmViewFixture.json")
 # the shared page files' node tests (never in a glob, so never shipped); checked to be there
 set(SHARED_NODE_TESTS "skins/shared/deskGenTest.js" "skins/shared/deskOverlayTest.js" "skins/shared/deskBridgeTest.js"
-	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskMenuTest.js" "skins/shared/deskCompatTest.js"
+	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskSelectTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskMenuTest.js" "skins/shared/deskCompatTest.js"
 	"skins/shared/deskKeymapTest.js" "skins/shared/deskKeyViewTest.js" "skins/shared/deskAboutTest.js"
 	"skins/shared/deskSyxTest.js" "skins/shared/deskDropTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS} ${SHARED_NODE_TESTS} ${MD_SHARED_PAGE_FILES})
@@ -262,9 +264,8 @@ function(mdmm_plugin_targets)
 		# and of what links it, so a bump rebuilt both plug-ins whole, JUCE's modules included. They go to the files
 		# that use them instead: the format wrappers (VST3, AU, Standalone: the versions hosts read), the two of
 		# ours that name JucePlugin_VersionString (mdPluginProcessor.cpp, mdStandaloneApp.cpp through
-		# standaloneApp.h; mdRecordMenu.cpp is in the _Standalone target) and upstream's serverPlugin.cpp (the
-		# bridge's plug-in description, bridge/client/plugin.h). A file that names them without having them does
-		# not compile.
+		# standaloneApp.h; mdRecordMenu.cpp is in the _Standalone target). A file that names them without having
+		# them does not compile.
 		set(_mdmmJuceVersionDefinitions "")
 		set(_mdmmVersionDefinition "^(JucePlugin_Version(String|Code)?|PluginVersion(Major|Minor|Patch))=")
 		foreach(_mdmmProperty COMPILE_DEFINITIONS INTERFACE_COMPILE_DEFINITIONS)
@@ -293,7 +294,7 @@ function(mdmm_plugin_targets)
 		endforeach()
 	endforeach()
 	# both plug-ins have the same version; their shared files are compiled once per plug-in with these
-	set_property(SOURCE mdPluginProcessor.cpp mdStandaloneApp.cpp serverPlugin.cpp
+	set_property(SOURCE mdPluginProcessor.cpp mdStandaloneApp.cpp
 		APPEND PROPERTY COMPILE_DEFINITIONS ${_mdmmJuceVersionDefinitions})
 	unset(_mdmmJuceVersionDefinitions)
 	unset(_mdmmDefinitions)
@@ -573,6 +574,9 @@ function(mdmm_plugin_targets)
 		# the pages on an older WebKit (B-001, macOS 12): the stylesheets without color-mix() and :focus-visible
 		add_test(NAME deskCompatPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskCompatTest.js)
 		set_tests_properties(deskCompatPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# selected steps (both editors, DESIGN-step-selection.md): the selection as a value, the select gesture, the keys, the step menu
+		add_test(NAME deskSelectPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskSelectTest.js)
+		set_tests_properties(deskSelectPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 		# the version both pages show is the one this build compiles in (MDMM_EDITOR_VERSION)
 		add_test(NAME deskAboutPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskAboutTest.js ${MDMM_EDITOR_VERSION})
 		set_tests_properties(deskAboutPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)

@@ -106,7 +106,9 @@ const DELETE = Overlay.DELETE;
 function onResult(r) {
 	/* its optimistic edits leave the overlay; a refused one is shown as the documents have it */
 	if (Overlay.answered(r.id) && !r.ok) scheduleRender();
-	if (!r.ok && r.errors && r.errors.length) showLastError(r.errors);	/* once: the error line, not a toast too */
+	/* B-051: refused because the machine's MIDI base channel is OFF: the notice offers the fix (base channel 1-4) */
+	if (!r.ok && r.errors && r.errors.length && /MIDI base channel is OFF/.test(r.errors[0])) noChannel(r.errors[0]);
+	else if (!r.ok && r.errors && r.errors.length) showLastError(r.errors);	/* once: the error line, not a toast too */
 	else if (r.note) toast(r.note);
 }
 /* The kit parameter index 0-23. With the group (syn, fx, rt) it is looked up in that page only: some
@@ -143,6 +145,11 @@ function clamp(v, a = 0, b = 127) { return Math.max(a, Math.min(b, v)); }
 const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
 let toastT; function toast(m) { const e = $("#toast"); e.textContent = m; e.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove("on"), 2800); }
 /* the error line under the header (over the page, never in its flow): 6 s, or until its × is clicked */
+function noChannel(text) {
+	const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+	ask(esc(text), [["Give each track its own channel", "cream", () => cmd("globalSet", { field: "baseChannel", v: 0 }, null, null, r => toast(r.ok
+		? "The machine listens on MIDI channels 1-4 now (GLOBAL › Base channel): each track has its own." : (r.errors || [])[0] || "Refused"))], ["Close", "", () => { }]], { key: "noChannel" });
+}
 function showLastError(errors) {
 	const e = $("#errline"); if (!e) return;
 	const hide = () => { clearTimeout(e._t); e.hidden = true; };

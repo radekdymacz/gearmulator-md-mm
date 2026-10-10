@@ -1971,6 +1971,36 @@ body.deskmidi #main,body.deskmidi #rail{opacity:.3;pointer-events:none;transitio
 /* a smaller window: fewer words on the keys, the columns one under the other */
 @media (max-width:900px){.kv-cap{height:38px}.kv-cap .kv-act{-webkit-line-clamp:1;font-size:9px}.kv-cols{grid-template-columns:minmax(0,1fr)}.kv-hint{display:none}.globpop.kview .keysgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.kv-cap{height:30px;padding:2px}.kv-cap .kv-act{display:none}.kv-cap.has::after{content:"";position:absolute;left:50%;bottom:4px;width:5px;height:5px;margin-left:-2px;border-radius:50%;background:var(--cream)}.kv-keys,.kv-board{gap:2px}.kv-cap b{font-size:8px}.globpop.kview .keysgrid{grid-template-columns:minmax(0,1fr)}}
+/* The GLOBAL panel both editors share (deskGlobal.js; B-051, F3): the Machinedrum Editor's v61 (P5) panel, moved here
+   unchanged, plus the Reset to defaults key and the channel warning. Plain grid and flex (macOS 12's WebKit). */
+.globpop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--body)}
+.globgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.globgrid .card{gap:8px}
+.globgrid .wide{grid-column:span 2}
+.gslots{display:flex;gap:4px}
+.gslots button{width:30px;height:26px;padding:0;font:500 12px var(--mono);letter-spacing:0;position:relative}
+.gslots button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.grow2{display:flex;align-items:center;gap:8px;min-height:28px}
+.grow2 .ilab{min-width:92px}
+.grow2 .seg button{height:24px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em}
+.gmap{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.gmk{display:grid;gap:1px;padding:4px 5px;text-align:left;font:500 11px var(--mono);letter-spacing:0;height:40px;align-content:center}
+.gmk small{font:10px var(--mono);color:var(--keydim)}
+.gmk .stepper{display:flex;gap:2px}
+.gmk.none{opacity:.55}
+/* the 16 track outputs as two rows of 8 (the map editor's grid beside it): MAIN dim, a direct output A-F lit */
+.grout{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.grout button{height:40px;min-width:0;padding:0 2px;display:grid;align-content:center;gap:1px;font:500 10px var(--mono);letter-spacing:0;overflow:hidden;white-space:nowrap;text-overflow:clip}
+.grout button small{font:10px var(--mono);color:var(--keydim)}
+.grout button b{font:600 11px var(--mono);overflow:hidden;text-overflow:clip}
+.grout button:not(.on) b{color:var(--keydim)}
+.grout button.on{background:var(--cream);color:var(--creamtext)}
+.grout button.on small{color:inherit;opacity:.7}
+.ginputs{display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));gap:3px 8px;font:12px var(--mono);align-items:center}
+.ginputs span{color:var(--print2);font:600 10px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.gnv{font:600 9px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--print3);border:1px solid var(--rule);border-radius:2px;padding:0 4px;margin-left:6px}
+.libhead .greset{flex:none}
+.gwarn{grid-column:1/-1;margin:0;font-size:12px;color:var(--red)}
 /* P7: the workspace and setup keys: one minimum width each, so the rows look even (MIX was a sliver) */
 #tabs button{min-width:60px!important;justify-content:center;box-sizing:border-box}
 .setkeys button{min-width:46px!important;justify-content:center;box-sizing:border-box}
@@ -2250,6 +2280,16 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 
 /* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
 @media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}
+
+/* selected steps (77-select.js, DESIGN-step-selection.md §7): the ruler's numbers, the selected track's trig rows,
+   the rail's tracks in the selection; the roll draws its own (drawSel); a drop's target dashed; the LCD's COPY CLR
+   PASTE marked while they take the selection */
+#seq .rul.selx{color:var(--print);font-weight:700;box-shadow:inset 0 -3px 0 var(--print)}
+#seq .tlane .tc.selx{outline:2px solid var(--print);outline-offset:-1px}
+#seq .tlane .tc.selghost{outline:2px dashed var(--print);outline-offset:-1px}
+.th.selt{box-shadow:inset 3px 0 0 var(--print)}
+.th.selt.marked{box-shadow:inset 3px 0 0 var(--print),inset 0 0 0 2px var(--led)}
+.lcdsec button.onsel{opacity:1;text-decoration:underline;text-underline-offset:2px}
 </style>
 <div class="app">
   <header class="top">
@@ -2267,7 +2307,7 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
     <div class="midgrp">
       <div class="lcdgroup">
         <div class="lcdpanel"><div class="bootscr" id="bootscr" aria-hidden="true"><div class="bs1">MONOMACHINE <span id="bsmk">SFX-60 MKII</span></div><div class="bs2" id="bstxt">OS 1.32B · STARTING</div><div class="bsbar"><i id="bsbar"></i></div></div>
-          <div class="f trf"><small class="engf"><select id="engsel" data-k="1" hidden><option value="emu">EMU OS 1.32B</option><option value="hw">HW MIDI</option><option value="audio">AUDIO/MIDI…</option><option value="rom">LOAD ROM</option></select><button class="kselbtn lcdeng" type="button" data-for="engsel" aria-haspopup="listbox" aria-expanded="false" aria-label="Engine: emulator or hardware" title="Engine: run the emulator, or edit a real Monomachine over MIDI"><i class="led on" id="engled"></i><span>EMU OS 1.32B</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></small><span class="lcdt">
+          <div class="f trf"><small class="engf"><select id="engsel" data-k="1" hidden><option value="emu">EMU OS 1.32B</option><option value="hw">HW MIDI</option><option value="audio">AUDIO/MIDI…</option><option value="global">GLOBAL…</option><option value="rom">LOAD ROM</option></select><button class="kselbtn lcdeng" type="button" data-for="engsel" aria-haspopup="listbox" aria-expanded="false" aria-label="Engine: emulator or hardware" title="Engine: run the emulator, or edit a real Monomachine over MIDI"><i class="led on" id="engled"></i><span>EMU OS 1.32B</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></small><span class="lcdt">
             <button class="lt rec" id="rec" aria-pressed="false" aria-label="Record" title="Record: stopped = GRID RECORDING, playing = LIVE RECORDING. Alt+Space: live recording."><i class="led" id="recled"></i>●</button>
             <button class="lt" id="play" aria-pressed="false" aria-label="Play" title="Play / stop (Space)"><i class="led" id="playled"></i><span id="playico">▶</span></button>
 </span></div>
@@ -2285,6 +2325,7 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
      <div class="tabs setkeys">
       <button class="skey" id="undo" aria-label="Undo" title="Undo (Cmd+Z)"><i class="ico">↶</i><span>Undo</span><small id="undon"></small></button>
       <button class="skey" id="redo" aria-label="Redo" title="Redo (Shift+Cmd+Z)"><i class="ico">↷</i><span>Redo</span><small id="redon"></small></button>
+      <button class="skey" id="globkey" aria-pressed="false" aria-label="Global settings" title="GLOBAL: the machine's MIDI settings (the channels each track listens on, sync in), kept in its active global"><i class="led"></i><span>Global</span></button>
       <button class="skey" id="platekey" aria-label="Switch MKI or MKII" title="MKI or MKII. Same silver plate; the MKII adds user waveforms and the DigiPRO Doubledraw and Ensemble machines."><i class="led"></i><span>MKII</span></button>
      </div></div>
     </div>
@@ -2299,6 +2340,7 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 <div class="machpop" id="machpop" role="dialog" aria-label="Choose a machine" hidden></div>
 <div class="kpop" id="kpop" role="listbox" hidden></div>
 <div class="libpop keyspop" id="keyspop" role="dialog" aria-label="Keys" hidden></div>
+<div class="libpop globpop" id="globpop" role="dialog" aria-label="Global settings" hidden></div>
 <div class="ampop" id="audiopop" role="dialog" aria-label="Audio and MIDI settings" hidden></div>
 <div class="dlg" id="dlg" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -2380,7 +2422,7 @@ function newMidi(ch){return{m:"MIDI",name:"MIDI "+ch,ch,v:{MID:[...DEFV.MID]},cc
 const note=(n,bits=[1,1,1])=>({n:Array.isArray(n)?n:[n],a:bits[0],f:bits[1],l:bits[2]});
 
 const S={ws:"seq",sel:0,side:"int",len:32,mult:"1X",swingAmt:58,playing:false,step:-1,bpm:120,pat:0,kit:0,kitState:"clean",queued:null,trigSel:"ALL",
- lane:"FLT.1",lanePage:"FLT",locks:new Map(),patTrn:64,routing:"3xSTEREO+AB=MIX",plate:"mk2",engine:"emu",pend:0,patSent:"live",rec:false,
+ lane:"FLT.1",lanePage:"FLT",locks:new Map(),patTrn:64,routing:"3xSTEREO+AB=MIX",glob:{slot:0,base:0,span:6,auto:8,multiTrig:6,multiMap:7,clockIn:false,transportIn:false},plate:"mk2",engine:"emu",pend:0,patSent:"live",rec:false,
  mode:"normal",songs:{names:["DEMO SONG",...Array(23).fill("EMPTY")],slot:0,current:0},multi:{mode:0,splitKey:60,splitTrack:3,timing:4},menv:{ATK:0,DEC:127,SUS:127,REL:127,PORT:0},kbOct:3,
  mmap:[{hi:47,pat:0,ofs:0,len:0,trn:64,tim:4},{hi:59,pat:1,ofs:0,len:16,trn:64,tim:4},{hi:71,pat:0,ofs:0,len:0,trn:69,tim:4},{hi:127,pat:2,ofs:8,len:8,trn:64,tim:1}],mmapSel:1,
  gmutes:null,rollLo:36,ghost:true,asTab:"JOY RL",joy:{x:0,y:0},
@@ -2714,7 +2756,7 @@ const MM_SEAM={
   "selectPattern","kit","tempo","mutes","keyMode","record","songSlot","chain","chainClear","seqMode","loadSong","waiting",
   "sendNow","playKey","keyUp","noteOn","noteOff","joy","learning","learnTarget","learnBind","modulators",
   "engine","chooseRom","removeRom","romManage","syxChoose","syxExport","syxStart","syxStop","revealRom",
-  "recheck","firstRun","bootScreen","renderPst","menu","audioDoc","audioSend","audioMeter"],
+  "recheck","firstRun","bootScreen","renderPst","menu","audioDoc","audioSend","audioMeter","globalSlot"],
  "view":[
   "audible","soloed","engReady","asgT","noteName","pname","machName","kitName","gated","busy","sel","mode",
   "playing","step","tempo","engineState","kitState","learnTarget","learning","ctlSetup","show","startEmpty",
@@ -2740,7 +2782,7 @@ window.MMDemoHost=window.MMHost?null:(()=>{
  function viewOf(){const F=(t,f)=>Object.fromEntries(f.map(n=>[n,copyV(t[n])]));
   return{ready:true,pat:S.pat,kit:S.kit,songSlot:S.songSlot??0,queued:S.queued,kitState:S.kitState,bpm:S.bpm,workName:S.workName,routing:S.routing,
    tracks:S.tracks.map(t=>F(t,[...KIT_F,...SEQ_F])),midi:S.midi.map(t=>F(t,[...MIDI_KIT_F,...SEQ_F])),locks:copyV(S.locks),len:S.len,mult:S.mult,swingAmt:S.swingAmt,
-   patTrn:S.patTrn,multi:copyV(S.multi),menv:copyV(S.menv),song:copyV(S.song),mmap:copyV(S.mmap),plays:copyV(S.plays),
+   patTrn:S.patTrn,multi:copyV(S.multi),menv:copyV(S.menv),song:copyV(S.song),mmap:copyV(S.mmap),plays:copyV(S.plays),glob:copyV(S.glob),
    patLens:Object.fromEntries(S.patInfo.map((x,p)=>[p,p===S.pat?S.len:x.len]))}}
  function put(e){base=structuredClone(e.base);rev=e.rev;const o=JSON.parse(e.lib,(k,v)=>v==="∞"?Infinity:v);Object.assign(S,o);show(base,true);drawLib()}
  const host={
@@ -2819,6 +2861,7 @@ function demoRebase(step){if(window.MMDemoHost)window.MMDemoHost.rebase(step)}
      chooseRom(), revealRom(), recheck()   the start-up card's keys (P7): the native file chooser for the
                                       firmware, the ROM folder, look again (the page never reads the ROM)
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
+     globalSlot(n)                    GLOBAL's slot keys: make global slot n (0-7) the active one (B-051)
    The view's side, for a host: window.MMView (130-main.js): values to read; show(view), the one
    writer of the state's document members (the machine's documents as the host derives them,
    DESIGN-UNIFY.md phase 1: the current pattern and kit, song, global, tempo, mutes, POLY, what
@@ -3206,6 +3249,110 @@ const TogglePaint = (() => {
 	}
 	return { begin, visit, changes, points };
 })();
+"use strict";
+/* Selected steps, one for both editors (DESIGN-step-selection.md; DESIGN-keymap.md K2, K3, K7): the selection as a
+   value and what moves it, the select gesture's decisions, the selection's keys and the step menu's list. A
+   selection is {t, n, from, to}: tracks t to t + n - 1, steps [from, to), the core's argument shape (copySteps,
+   clearSteps, copyStepsTo; deskCore/deskBlocks.h); a cell is {t, s}. Pure but for bind() (the page's Keys) and
+   keyOf() (the words of an entry's key). Each page keeps its own drawing, its own operations (they send its own
+   commands) and its own pointer wiring: the Machinedrum's grid (mdDeskSelect.js, mdDeskGestures.js), the
+   Monomachine's piano roll and trig rows (the mockup's 72-select.js). `tracks` is the machine's track count (16 or
+   12), `len` the pattern's length. */
+const StepSel = (() => {
+	const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+	/* the block between two cells, both in it */
+	function between(a, b) {
+		const t = Math.min(a.t, b.t), from = Math.min(a.s, b.s);
+		return { t, n: Math.abs(a.t - b.t) + 1, from, to: Math.max(a.s, b.s) + 1 };
+	}
+	const inside = (x, t, s) => !!x && t >= x.t && t < x.t + x.n && s >= x.from && s < x.to;
+	/* the selection within `len` steps, or null when none of it is there */
+	function shown(x, len) { if (!x) return null; const to = Math.min(x.to, len); return x.from < to ? { t: x.t, n: x.n, from: x.from, to } : null; }
+	/* the selection grown to take a cell in */
+	function extend(x, c) { const t = Math.min(x.t, c.t), last = Math.max(x.t + x.n - 1, c.t); return { t, n: last - t + 1, from: Math.min(x.from, c.s), to: Math.max(x.to, c.s + 1) }; }
+	/* the block a paste of `size` ({tracks, length}) puts down with its first step at `at` on track dt: where it stops */
+	const landing = (size, dt, at, tracks, len) => ({ t: dt, n: Math.min(size.tracks, tracks - dt), from: at, to: Math.min(at + size.length, len) });
+	/* ← → (a step) and ↑ ↓ (a track): the selection moved, kept inside the pattern */
+	function moved(x, dt, ds, len, tracks) {
+		const n = x.to - x.from, from = clamp(x.from + ds, 0, Math.max(0, len - n)), t = clamp(x.t + dt, 0, tracks - x.n);
+		return { t, n: x.n, from, to: from + n };
+	}
+	/* ⇧← ⇧→: the selection a step longer at its start or its end */
+	const grown = (x, ds, len) => ds > 0 ? { t: x.t, n: x.n, from: x.from, to: Math.min(len, x.to + 1) } : { t: x.t, n: x.n, from: Math.max(0, x.from - 1), to: x.to };
+	/* "track 3, steps 5–8" in the machine's words: name(t, n) names tracks t to t + n - 1 */
+	const say = (x, name) => `${name(x.t, x.n)}, ${x.to - x.from > 1 ? `steps ${x.from + 1}–${x.to}` : `step ${x.from + 1}`}`;
+	const one = x => !!x && x.n === 1 && x.to - x.from === 1;
+
+	/* ---- the select gesture: a press decides whether it is one (start), each cell the pointer crosses moves it (at),
+	   the release decides what it made (end). m: the press's modifiers {cmd (⌘, Ctrl off a Mac: Modifiers.cmd), shift,
+	   alt, ctrl}; on a step only ⌘ selects (⌘⇧ extends); in the step ruler a press without ⌘, ⌥ or Ctrl selects steps
+	   of the selected track (⇧ extends); a ⌘-press inside a selection of more than one step drops a copy of it where it
+	   lets go. x: the selection now, selTrack the selected track. ---- */
+	function start(m, cell, ruler, x, selTrack) {
+		if (!ruler && (!m.cmd || m.alt)) return null;
+		if (ruler && (m.alt || m.cmd || m.ctrl)) return null;
+		const at = ruler ? { t: x && m.shift ? x.t : selTrack, s: cell.s } : cell;
+		const drop = !ruler && !m.shift && !!x && inside(x, at.t, at.s) && (x.n > 1 || x.to - x.from > 1);
+		return { from: at, at, ruler, extend: !!m.shift && !!x, drop, moved: false };
+	}
+	/* where a dragged selection lands: moved by the drag, within the tracks and the steps */
+	function dropAt(x, d, len, tracks) {
+		const t = clamp(x.t + d.at.t - d.from.t, 0, tracks - x.n), from = clamp(x.from + d.at.s - d.from.s, 0, len - 1);
+		return { t, n: x.n, from, to: Math.min(from + x.to - x.from, len) };
+	}
+	/* what the pointer shows while it moves: the drop's target (ghost) or the selection so far (sel) */
+	const during = (d, x, len, tracks) => d.drop ? { ghost: dropAt(x, d, len, tracks) } : { sel: between(d.from, d.at) };
+	/* what the release made: a copy dropped ({drop: target}) or a selection ({sel}) */
+	function end(d, x, len, tracks) {
+		if (d.drop && d.moved) return { drop: dropAt(x, d, len, tracks) };
+		return { sel: d.extend && !d.moved && x ? extend(x, d.at) : between(d.from, d.at) };
+	}
+
+	/* ---- the selection's keys (the same ids, keys and modifiers on both editors: deskKeymapTest.js). p: the page's
+	   {seqKeys(): its Sequence keys are on, has(): a selection, selKeys(): its keys may take the arrows and Enter (a
+	   selection, no other control focused), cut, duplicate, selectAll, move(ds), grow(ds), trigs, deselect,
+	   deselectWhen(), does: {id: words} for what the page says its own way, area: the pointer's area name} ---- */
+	function bind(Keys, p) {
+		const does = (id, words) => (p.does && p.does[id]) || words;
+		const area = p.area || "Steps";
+		Keys.bind({ id: "cut", short: "Cut", scope: "seq", keys: ["X"], mod: "cmd", group: "Sequence", does: does("cut", "Cut the selected steps (copy, then clear; one undo step)"), when: () => p.seqKeys() && p.has(), run: () => p.cut() });
+		Keys.bind({ id: "duplicate", short: "Duplicate", scope: "seq", keys: ["D"], mod: "cmd", group: "Sequence", does: does("duplicate", "Duplicate the selected steps right after themselves (the clipboard stays); again: once more"), when: () => p.seqKeys() && p.has(), run: () => p.duplicate() });
+		Keys.bind({ id: "select-all", short: "Select all", scope: "seq", keys: ["A"], mod: "cmd", group: "Sequence", does: does("select-all", "Select every step of every track up to the length (then ⌘C copies the pattern as a block)"), when: () => p.seqKeys(), run: () => p.selectAll() });
+		Keys.bind({ id: "sel-move", short: "Sel ← / Sel →", scope: "seq", keys: ["ArrowLeft", "ArrowRight"], group: "Sequence", does: does("sel-move", "Move the selection a step earlier / later (one step selected: a cursor)"), when: () => p.selKeys(), run: e => p.move(e.key === "ArrowRight" ? 1 : -1) });
+		Keys.bind({ id: "sel-extend", short: "Grow ← / Grow →", scope: "seq", keys: ["ArrowLeft", "ArrowRight"], mod: "shift", group: "Sequence", does: does("sel-extend", "Extend the selection a step earlier / later"), when: () => p.selKeys(), run: e => p.grow(e.key === "ArrowRight" ? 1 : -1) });
+		Keys.bind({ id: "sel-trigs", short: "Trigs", scope: "seq", keys: ["Enter"], group: "Sequence", does: does("sel-trigs", "The selected steps' trigs on, or off when each has one (one undo step)"), when: () => p.selKeys(), run: () => p.trigs() });
+		Keys.bind({ id: "deselect", short: "Deselect", scope: "seq", keys: ["Escape"], group: "Sequence", does: does("deselect", "Clear the step selection"), when: () => p.seqKeys() && p.has() && p.deselectWhen(), run: () => p.deselect() });
+		Keys.bind({ id: "step-select", scope: "seq", area, keys: ["step"], mod: "cmd", group: "Sequence", does: does("step-select", "Click: select the step (⌘V pastes there). Drag: select steps × tracks. Drag the selection: a copy where you let go") });
+		Keys.bind({ id: "step-extend", scope: "seq", area, keys: ["step"], mod: "cmd+shift", group: "Sequence", does: does("step-extend", "Click: extend the selection to the step") });
+		Keys.bind({ id: "ruler-select", scope: "seq", area, keys: ["step ruler"], group: "Sequence", does: does("ruler-select", "Click or drag: select steps of the selected track (down over the grid: more tracks); ⇧-click extends") });
+		Keys.bind({ id: "step-menu", scope: "seq", area, keys: ["right-click a step"], group: "Sequence", does: does("step-menu", "The step menu: trig, accent, slide, copy, cut, paste here, duplicate, clear, fill every 2nd / 4th from it; on a selected step for the whole selection (Ctrl-click on a Mac; the Menu key on a focused step)") });
+	}
+
+	/* the words of an entry's key (a pointer gesture's: "⌘⇧-click") */
+	function keyOf(Keys, id) {
+		const b = Keys.byId(id); if (!b) return "";
+		return b.area ? Keys.modsLabel(b.mod) + "-click" : Keys.label(b);
+	}
+	/* ---- the step menu (K3): the machine's marks first (its trig, accent, slide; the MM's note off, trigless, chord),
+	   then the selection's operations with their keys, then the fills, for DeskMenu (deskMenu.js). p: {marks: items,
+	   copy, cut, paste, canPaste, duplicate, clear, fill(n), key(id)} ---- */
+	function menuItems(p) {
+		return [...p.marks, "-",
+			{ id: "copy", label: "Copy", key: p.key("copy"), run: p.copy },
+			{ id: "cut", label: "Cut", key: p.key("cut"), run: p.cut },
+			{ id: "paste", label: "Paste here", key: p.key("paste"), enabled: !!p.canPaste, run: p.paste },
+			{ id: "duplicate", label: "Duplicate", key: p.key("duplicate"), run: p.duplicate },
+			{ id: "delete", label: "Clear", key: p.key("delete"), run: p.clear },
+			"-",
+			{ id: "step-fill-2", label: "Fill every 2nd from here", key: "", run: () => p.fill(2) },
+			{ id: "step-fill-4", label: "Fill every 4th from here", key: "", run: () => p.fill(4) }];
+	}
+	/* the menu's title: the step, or the selection */
+	const menuTitle = (x, t, s, name) => one(x) ? `${name(t, 1).replace(/^./, c => c.toUpperCase())}, step ${s + 1}` : `Selected: ${say(x, name)}`;
+
+	return { between, inside, shown, extend, landing, moved, grown, say, one, start, dropAt, during, end, bind, keyOf, menuItems, menuTitle };
+})();
+if (typeof module !== "undefined") module.exports = StepSel;
 /* ===== Keys (from the Machinedrum Editor, P5 and its mnemonic map, DESIGN-generators.md §5) =====
    Every shortcut is an entry of Keys: the ? overlay is generated from it, so it lists what the keys really do.
    An entry with run() is dispatched by the one handler (in order, the first match wins); one without run() is
@@ -3997,7 +4144,7 @@ const Syx = (() => {
 		const list = last.items[k], g = layout(last.model, k, list);
 		const style = g.cols ? `grid-template-columns:${k === "global" ? "" : "26px "}repeat(${g.cols},minmax(0,1fr))` : "grid-template-columns:repeat(auto-fill,minmax(110px,1fr))";
 		const body = g.rows.map(r => (g.cols && k !== "global" ? `<span class="syxrl">${r.label}</span>` : "") + r.cells.map(c => cell(k, c)).join("")).join("");
-		const note = k === "global" ? `<p class="syxnote"><b>Globals</b> hold the machine's MIDI channels, sync and settings: off unless you tick them, and the active one becomes active at once.</p>`
+		const note = k === "global" ? `<p class="syxnote"><b>Globals</b> hold the machine's MIDI channels, sync and settings: importing one changes the MIDI channels the machine listens on, and so which tracks the editor can mute, play and edit live (GLOBAL shows them). Off unless you tick them; the active one becomes active at once.</p>`
 			: k === "other" ? `<p class="syxnote">Messages that are no kit, pattern, song or global (commands, sounds): sent as they are when ticked.</p>` : "";
 		return `<div class="syxpane${on[k] ? "" : " kindoff"}" data-syxpane="${k}" role="tabpanel"${k === tab ? "" : " hidden"}>${note}<div class="syxgrid${k === "global" ? " g8" : ""}" style="${style}">${body}</div></div>`;
 	}
@@ -4383,7 +4530,7 @@ const gapC=s=>s%16===0&&s!==vis()[0]?"gap":"";
 /* MD Editor Sequence layout: rail = tracks + SYNTH/MIDI + lock parameter; main = page keys, ruler,
    ONE piano roll for the selected track (the height of the MD's 16-row grid), ENV/SLIDE/SWING rows, lock lane. */
 const ROLL_H=16*28+15*3;
-function th(t){const tr=trk(t),polyOff=S.mode==="poly"&&t!==S.sel&&t<6;return`<div class="th ${t===S.sel?"sel":""} ${S.ws==="seq"&&S.marks?.has(t)?"marked":""} ${audible(t)?"":"off"} ${polyOff?"poly-off":""}" data-sel="${t}">
+function th(t){const tr=trk(t),polyOff=S.mode==="poly"&&t!==S.sel&&t<6;return`<div class="th ${t===S.sel?"sel":""} ${S.ws==="seq"&&S.marks?.has(t)?"marked":""} ${trackSel(t)} ${audible(t)?"":"off"} ${polyOff?"poly-off":""}" data-sel="${t}">
  <div class="threw"><div class="sw"></div><div class="n ${t<6?"":"fill"}">${t<6?t+1:"M"+(t-5)}</div><div class="nm" title="${tr.name}"><b>${t<6?tr.m.replace("SWAVE-","SW-"):"CH"+String(tr.ch).padStart(2,"0")}</b>${S.ws==="seq"&&S.gen?`<i class="gtag" title="${genTip(t)}">${genTag(genSpec(t))}</i>`:""}</div>
  <button class="ms m ${ARMED.has(t)?"prep":""}" ${ARMED.has(t)?`data-prep="${ARMED.get(t)?"X":"+"}"`:""} data-mute="${t}" aria-pressed="${tr.mute}" aria-label="Mute ${tLabel(t)}">M</button><button class="ms s" data-solo="${t}" aria-pressed="${tr.solo}" aria-label="Solo ${tLabel(t)}">S</button></div></div>`}
 function pageKeys(){return`<span class="pagectl rh"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`}
@@ -4396,15 +4543,15 @@ function renderRail(){const r=$("#rail"),withSide=S.ws==="seq"||S.ws==="sound";
  const anyMs=[...S.tracks,...S.midi].some(x=>x.mute||x.solo);
  r.innerHTML=`<div class="railhead">Track<button class="iconkey allon" id="allon" ${anyMs?"":"disabled"} title="Unmute and unsolo every track (0)">M/S off</button></div>`+side().map(th).join("")+(withSide?`<div style="margin-top:4px">${sideSw()}</div>`:"")+(S.ws==="seq"?lockPicker(S.sel):"");altLabels()}
 function rowStatus(t){const tr=trk(t),arp=tr.arp.MODE>0,trn=tr.tr.TRACK-64;return[arp?"ARP":"",t<6&&tr.tr.SCALE?["","FIX","MAJ","MIN"][tr.tr.SCALE]:(trn?(trn>0?"+":"")+trn:"")].filter(Boolean).join(" ")}
-const ROLL_TIP=t=>`${tLabel(t)} notes. Click adds a note or moves its pitch · drag up or down for pitch · shift-click adds a chord note · drag a bar's end to move its ${isMidiT(t)?"LEN":"NOTE OFF"} · alt-click deletes a note, or sets a NOTE OFF on an empty step · scroll = pitch${isMidiT(t)?"":" · the keys on the left play the note"}${(()=>{const a=trk(t).arp;return a.MODE&&a.SPD?` · light notes: what the arpeggiator plays${a.PLAY===4?" (random order: outlined, the pitches vary)":""}`:""})()}`;
+const ROLL_TIP=t=>`${tLabel(t)} notes. Click adds a note or moves its pitch · drag up or down for pitch · shift-click adds a chord note · drag a bar's end to move its ${isMidiT(t)?"LEN":"NOTE OFF"} · alt-click deletes a note, or sets a NOTE OFF on an empty step · ⌘-click or ⌘-drag selects steps · right-click: the step menu · scroll = pitch${isMidiT(t)?"":" · the keys on the left play the note"}${(()=>{const a=trk(t).arp;return a.MODE&&a.SPD?` · light notes: what the arpeggiator plays${a.PLAY===4?" (random order: outlined, the pitches vary)":""}`:""})()}`;
 function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);dockOf(t);
  const rows=[["env",midi?"VEL":"Env"],["sld","Slide"],["swg","Swing"]];
- let h=`<div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}"><div class="rul"></div>${steps().map(s=>`<div class="rul ${gapC(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}</div>
+ let h=`<div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}"><div class="rul"></div>${steps().map(s=>`<div class="rul ${gapC(s)} ${rulSel(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}</div>
   <div class="nlane big"><canvas class="roll" data-ed="lane" data-t="${t}" data-big="1" title="${ROLL_TIP(t)}" aria-label="${ROLL_TIP(t)}"></canvas></div>
   <div class="tlanes" id="tlanes">${rows.map(([k,lab])=>{if(k==="env"&&midi)return`<div class="tlane env" style="grid-template-columns:${cols()}" title="Velocity per note (VEL, lockable)"><span class="tlab">VEL</span>${steps().map(s=>{const st=tr.steps[s];const v=st&&!st.off?velOf(t,s):null;return`<span class="tc envc ${gapC(s)} ${v==null?"na":""}">${v!=null?`<i class="velbar" style="--v:${v/127*100}%" title="VEL ${v}"></i>`:""}</span>`}).join("")}</div>`;
    return`<div class="tlane ${k}" style="grid-template-columns:${cols()}" title="${{env:"Which envelopes this trig fires: AMP (red), FILTER (yellow), LFO (green), the manual's trig tracks. No dots = trigless.",sld:"Slide: a locked value glides to its next lock",swg:"Swing: these steps come late by the pattern's swing amount"}[k]}"><span class="tlab">${k==="env"?`<small class="envlab">A F L</small>`:lab}</span>${steps().map(s=>{const st=tr.steps[s];
-    if(k==="env"){const ok=st&&!st.off;return`<span class="tc envc ${gapC(s)} ${ok?"":"na"}" data-s="${s}">${ok?["a","f","l"].map(b=>`<button class="d ${b} ${st[b]?"on":""}" data-env="${b}" data-s="${s}" aria-pressed="${!!st[b]}" aria-label="${{a:"AMP",f:"FILTER",l:"LFO"}[b]} trig step ${s+1}"></button>`).join(""):""}</span>`}
-    const on=k==="sld"?tr.slide.has(s):tr.swing.has(s);return`<button class="tc ${on?"on":""} ${gapC(s)}" data-tl="${k}" data-s="${s}" aria-pressed="${on}" aria-label="${lab} step ${s+1}"></button>`}).join("")}</div>`}).join("")}</div></div></div>
+    if(k==="env"){const ok=st&&!st.off;return`<span class="tc envc ${gapC(s)} ${ok?"":"na"} ${cellSel(s)}" data-s="${s}">${ok?["a","f","l"].map(b=>`<button class="d ${b} ${st[b]?"on":""}" data-env="${b}" data-s="${s}" aria-pressed="${!!st[b]}" aria-label="${{a:"AMP",f:"FILTER",l:"LFO"}[b]} trig step ${s+1}"></button>`).join(""):""}</span>`}
+    const on=k==="sld"?tr.slide.has(s):tr.swing.has(s);return`<button class="tc ${on?"on":""} ${gapC(s)} ${cellSel(s)}" data-tl="${k}" data-s="${s}" aria-pressed="${on}" aria-label="${lab} step ${s+1}"></button>`}).join("")}</div>`}).join("")}</div></div></div>
  ${genBarHtml()}
  <div class="lanewrap"><div class="lanetop">${S.dock==="locks"?`<span class="cap">Lock lane · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m} · <b id="lanename">${pidLabel(t,S.lane)}</b> <span class="lanescale" id="lanescale"></span></span>
   <span class="lockbudget" id="lockbudget"></span><span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Shift-drag draws a ramp, a straight line from where you press to where you let go. The wheel over a step with a trig moves its lock (Shift: fine). Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value. A slide step glides to the next lock.">Draw to lock · ⇧ ramp · alt erases</span>`:(()=>{const[h,hl]=dockHelp(t,S.dock);return`<span class="cap">${DOCKN[S.dock]} · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m}</span><span class="lockbudget dkread" id="dkread">${dockRead(t,S.dock)}</span><span class="lanehelp dkhelp" title="${dkAttr(hl)}">${h}</span>`})()}${dockTabs(t)}</div>
@@ -4498,6 +4645,7 @@ ED.lane={draw(g,W,H,c){const G=laneGeom(c),t=G.t,tr=trk(t),ink=cssv("--ink");if(
    if(n%12===0||n===G.hi){g.fillStyle=ink;g.font="9px Silkscreen, monospace";g.textAlign="right";g.fillText(noteName(n),KW-3,y+G.rh/2+3.5);g.textAlign="left"}}}
   else{g.fillStyle=ink;g.font="8px Silkscreen, monospace";const ns=tr.steps.slice(0,S.len).flatMap(x=>x?.n||[]);if(ns.length){const mn=Math.min(...ns),mx=Math.max(...ns);g.fillText(mn===mx?noteName(mn).replace("-",""):noteName(mn).replace("-","")+"-"+noteName(mx).replace("-",""),G.lastX+4,11)}const st=rowStatus(t);if(st)g.fillText(st,G.lastX+4,H-5)}
   G.vs.forEach(s=>{const x=G.col[s];if(!x)return;if(s%4===0){g.fillStyle=inkA(G.big?.1:.07);g.fillRect(x.x0,0,x.x1-x.x0,G.H)}});
+  if(G.big)drawSel(g,G,t);
   if(G.big&&S.ghost)side().forEach(o=>{if(o===t||(o<6&&(isFx(trk(o).m)||trk(o).m==="DPRO-BBOX")))return;noteSpans(o).forEach(sp=>{const r=spanX(G,sp);if(!r||sp.n[0]<G.lo||sp.n[0]>G.hi)return;g.fillStyle=inkA(.14);g.fillRect(r[0]+2,G.y(sp.n[0])+3,r[1]-r[0]-4,G.rh-6)})});
   /* the arpeggiator's output as ghost notes at their real pitch, under the trigs: lighter and thinner, never hit-tested. PLAY RND is not predictable: outlined, hatched */
   if(G.arp){const rnd=tr.arp.PLAY===4,gh=Math.max(3,Math.round(G.rh*.5));noteSpans(t).forEach(sp=>arpTicks(t,sp).forEach(q=>{if(q.n<G.lo||q.n>G.hi||q.x<G.a||q.x>=G.b)return;const s0=Math.floor(q.x),c1=G.col[s0];if(!c1)return;const cw=c1.x1-c1.x0,xx=c1.x0+(q.x-s0)*cw+1,ww=Math.max(2,q.w*cw-2),yy=G.y(q.n)+(G.rh-gh)/2;
@@ -4527,10 +4675,10 @@ const rollRow=(c,G,e)=>{const r=c.getBoundingClientRect(),n=G.lo+G.rows-1-Math.f
 const onKeys=(c,G,e)=>e.clientX-c.getBoundingClientRect().left<G.firstX-1.5;
 function rollKey(t,n){rollDrag.n=n;if(n!=null)keyNote(t,n,KB.vel)}
 document.addEventListener("pointerout",e=>{const c=e.target.closest?.("canvas.roll");if(c&&!c.contains(e.relatedTarget)&&S.rollHov){S.rollHov=null;drawEd(c)}});
-function rollDown(c,e){const t=+c.dataset.t;if(t!==S.sel){select(t);return}
+function rollDown(c,e){if(e.button!==0)return;const t=+c.dataset.t;if(t!==S.sel){select(t);return}
  {const G=laneGeom(c);if(e.button===0&&onKeys(c,G,e)){const n=rollRow(c,G,e);if(n==null)return;if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}rollDrag={mode:"key",t,c};rollKey(t,n);drawEd(c);return}}
  const h=laneHit(c,e);if(!h)return;const tr=trk(t);
- if(e.metaKey||e.ctrlKey){fillEvery(t,h.cell,e.shiftKey?4:2,h.n);return}
+ if(e.metaKey||e.ctrlKey)return;	/* ⌘ selects (77-select.js), Ctrl on a Mac is the step menu's; the fill is in the step menu (K7) */
  if(h.k>=0&&e.altKey){const st=tr.steps[h.s];if(h.k>0||(st.n&&st.n.length>1))st.n.splice(h.k,1);else{tr.steps[h.s]=null;clearStepLocks(t,h.s)}rollDrag={mode:"erase",s:h.s,c,last:h.s,touched:new Set([h.s])};redraw();return}
  if(h.k<0&&e.altKey){const st=tr.steps[h.cell];if(!st||st.off){tr.steps[h.cell]=st?.off?null:{off:1};editStep(t,h.cell);rerenderSeq()}return}
  if(h.k>=0&&h.edge){rollDrag={mode:"len",s:h.s,c,touched:new Set()};return}
@@ -4578,7 +4726,7 @@ function rollUp(){const d=rollDrag;rollDrag=null;if(d?.mode==="key"){if(d.n!=nul
 /* ---- Alt, a global modifier: Alt + CLR (or Alt + Delete in Sequence) clears the whole pattern, Alt + the lock
    lane's clear key every lock of the selected track. While Alt is held the keys it changes say so. ---- */
 S.alt=false;
-function altLabels(){const c=$('[data-sec="clear"]');if(c){c.textContent=S.alt?"All":"Clr";c.title=S.alt?`Clear the whole pattern ${patName(S.pat)}: every track's notes, slides and locks (one undo step)`:"Clear (Delete). Alt: the whole pattern"}
+function altLabels(){const c=$('[data-sec="clear"]');if(c){c.textContent=S.alt?"All":"Clr";if(S.alt)c.title=`Clear the whole pattern ${patName(S.pat)}: every track's notes, slides and locks (one undo step)`}secLabels();
  const cl=$("#clearLane");if(cl){const t=S.alt?`Clear every lock of ${tLabel(S.sel)}`:`Clear ${pidLabel(S.sel,S.lane)} locks. Alt: every lock of ${tLabel(S.sel)}`;cl.title=t;cl.setAttribute("aria-label",t)}}
 /* Alt seen up (any key or pointer event without it) also ends a rotate run: its keyup may never reach the page */
 function showAlt(on){if(S.alt===on)return;S.alt=on;if(!on)rotHold=false;document.body.classList.toggle("althold",on);altLabels();if(S.gen&&S.ws==="seq")genDraw();if(S.gen&&S.ws==="sound")renderMutStrip()}
@@ -4605,8 +4753,9 @@ function rotateTrack(by){const t=S.sel,tr=trk(t),len=S.len;if(len<2)return;
  for(const[k,m] of S.locks){if(+k.split("|")[0]!==t)continue;const n=new Map();for(const[s,v] of m)n.set(s<len?rotStep(s,by,len):s,v);S.locks.set(k,n)}
  rotHold=true;edit("rotate",{t,by});rerenderSeq()}
 
-/* ---- every-N fill: ⌘-click a step in the roll, every 2nd step from there to the end gets a note at that pitch
-   (⌘⇧: every 4th); from a step with a note they go off, with their locks. A NOTE OFF is left alone. ---- */
+/* ---- every-N fill: the step menu's Fill every 2nd / 4th from here (K7; it was ⌘-click in the roll, ⌘ selects now):
+   every 2nd step from there to the end gets a note at that pitch (the row right-clicked, or the track's last);
+   from a step with a note they go off, with their locks. A NOTE OFF is left alone. ---- */
 function fillEvery(t,s,n,pitch){const tr=trk(t),end=S.len,on=!(tr.steps[s]&&!tr.steps[s].off);let ch=0;
  for(let k=s;k<end;k+=n){const st=tr.steps[k];if(st?.off)continue;if(on&&!st){tr.steps[k]=note(pitch);ch++}else if(!on&&st){tr.steps[k]=null;tr.slide.delete(k);clearStepLocks(t,k);ch++}}
  const nth=n===2?"2nd":"4th";if(!ch){toast(`${tLabel(t)} already has every ${nth} step ${on?"on":"off"} from step ${s+1}.`);return}
@@ -4701,14 +4850,12 @@ Keys.bind({id:"velocity",scope:"any",keys:["C","V"],group:"Playing",does:()=>`Ve
 /* ---- the selected track's keys, the all keys, the step gestures ---- */
 Keys.bind({id:"mute-track",scope:"any",keys:["M"],code:"KeyM",group:"Selected track",does:"Mute or unmute the selected track",when:kbOn,run:()=>muteSel()});
 Keys.bind({id:"mute-all",scope:"any",keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
-Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
- when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
+Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
+ when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{if(selKeys()){selMove(e.key==="ArrowDown"?1:-1,0);return}const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
 Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here)",when:kbOn,run:()=>tapTempo()});
 Keys.bind({id:"rotate",scope:"seq",keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
 Keys.bind({id:"unmute-all",scope:"any",keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
 Keys.bind({id:"unmark-paste",scope:"seq",keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});
-Keys.bind({id:"roll-fill-2",scope:"seq",area:"Roll",keys:["roll"],mod:"cmd",group:"Sequence",does:"Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step"});
-Keys.bind({id:"roll-fill-4",scope:"seq",area:"Roll",keys:["roll"],mod:"cmd+shift",group:"Sequence",does:"Click: every 4th step from there to the end"});
 Keys.bind({id:"lockstep-wheel",scope:"seq",area:"Lock lane",keys:["wheel on a lock step"],group:"Sequence",does:"Move its lock in the lane's parameter, 4 a notch (⇧: 1)"});
 Keys.bind({id:"lane-ramp",scope:"seq",area:"Lock lane",keys:["lock lane"],mod:"shift",group:"Sequence",does:"Drag: a ramp, a straight line from the press to the release (one undo step)"});
 Keys.bind({id:"track-mark-paste",scope:"seq",area:"Tracks",keys:["track header"],mod:"shift",group:"Sequence",does:"Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)"});
@@ -4905,6 +5052,152 @@ Keys.bind({id:"randomise-all",scope:"any",keys:["R"],code:"KeyR",mod:"alt",group
  does:"Randomise every track: on Sound every synth track's sound, everywhere else every GEN spec of the side shown over the whole pattern"});
 Keys.bind({id:"gen-value-all",scope:"seq",area:"GEN bar",keys:["GEN value"],mod:"alt",group:"All",does:"Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)"});
 Keys.bind({id:"rkey-all",scope:"any",area:"GEN bar",keys:["R key"],mod:"alt",group:"All",does:"Click: randomise every track (Sound: every synth track; VOL and TUNE stay)"});
+
+/* ===== Selected steps (DESIGN-step-selection.md §7, DESIGN-keymap.md K7): as the Machinedrum Editor =====
+   The selection is one value, S.stepSel = {t, n, from, to} (tracks t to t + n - 1, steps [from, to)); what it is and
+   what moves it, the press / drag / release decisions, its keys and the step menu's order are both editors' (StepSel,
+   skins/shared/deskSelect.js). Here: where the Monomachine shows it (the piano roll's columns, the trig rows, the
+   step ruler, the rail's tracks), its pointer (⌘-click or ⌘-drag in the roll or a trig row, the ruler without a
+   modifier, ⌘⇧ extends, ⌘-drag of the selection drops a copy) and its operations, each one intent of the core
+   (copySteps, clearSteps, pasteSteps, copyStepsTo, steps; a cut is two in one gesture): one undo step. The roll
+   shows one track: ⌘⇧-click on another track's roll extends the selection to it; ⌘A takes every track of the side
+   shown. A row of steps pastes onto a track of its kind only (synth or MIDI), as on the machine. */
+S.stepSel=null;
+const SEL_TRACKS=12;
+const selName=(t,n)=>n>1?`${tLabel(t)}–${tLabel(t+n-1)}`:tLabel(t);
+const selSay=x=>StepSel.say(x,selName);
+function inSel(t,s,x=S.stepSel){return StepSel.inside(x,t,s)}
+function selShown(x=S.stepSel){return StepSel.shown(x,S.len)}
+/* the classes the rows' templates (70-seq.js) and syncSel give: the ruler's numbers, the selected track's trig cells, the rail's tracks */
+const rulSel=s=>S.stepSel&&s>=S.stepSel.from&&s<S.stepSel.to?"selx":"";
+const cellSel=s=>(inSel(S.sel,s)?"selx":"")+(inSel(S.sel,s,selGhost)?" selghost":"");
+const trackSel=t=>S.ws==="seq"&&S.stepSel&&t>=S.stepSel.t&&t<S.stepSel.t+S.stepSel.n?"selt":"";
+let selGhost=null;	/* where a ⌘-drag of the selection would drop its copy (dashed) */
+function syncSel(ghost){selGhost=ghost||null;
+ $$("#seq .ruler .rul[data-s]").forEach(r=>r.classList.toggle("selx",!!rulSel(+r.dataset.s)));
+ $$("#seq .tlane .tc[data-s]").forEach(c=>{const s=+c.dataset.s;c.classList.toggle("selx",inSel(S.sel,s));c.classList.toggle("selghost",inSel(S.sel,s,selGhost))});
+ $$("#rail .th[data-sel]").forEach(h=>h.classList.toggle("selt",!!trackSel(+h.dataset.sel)));
+ secLabels();redraw()}
+function setSel(x){S.stepSel=x;syncSel()}
+function clearSel(){if(!S.stepSel&&!selGhost)return;S.stepSel=null;syncSel()}
+/* the roll draws the selection over the selected track's columns (ED.lane, 70-seq.js) */
+function drawSel(g,G,t){for(const[b,dash] of [[S.stepSel,false],[selGhost,true]]){if(!b||t<b.t||t>=b.t+b.n)continue;
+ const a=Math.max(b.from,G.a),e=Math.min(b.to,G.b);if(e<=a)continue;const c0=G.col[a],c1=G.col[e-1];if(!c0||!c1)continue;
+ g.save();if(!dash){g.fillStyle=inkA(.1);g.fillRect(c0.x0,0,c1.x1-c0.x0,G.H)}g.strokeStyle=cssv("--ink");g.lineWidth=2;if(dash)g.setLineDash([5,4]);g.strokeRect(c0.x0+1,1,c1.x1-c0.x0-2,G.H-2);g.restore()}}
+/* the LCD's COPY CLR PASTE say what they act on, marked while it is the selected steps */
+function secLabels(){const sel=S.ws==="seq"&&!!S.stepSel,say=sel?selSay(S.stepSel):"";
+ const cp=$('[data-sec="copy"]'),pa=$('[data-sec="paste"]'),c=$('[data-sec="clear"]');
+ for(const b of [cp,pa,c])if(b)b.classList.toggle("onsel",sel&&!(b===c&&S.alt));
+ if(cp)cp.title=sel?Modifiers.say(`Copy the selected steps, ${say} (⌘C)`):Modifiers.say("Copy (⌘C): Sequence, the selected track's page shown; Sound, the machine; Perform, the assign; Song, the row");
+ if(pa)pa.title=sel?Modifiers.say(`Paste at the selected step, ${say} (⌘V)`):Modifiers.say("Paste (⌘V)");
+ if(c&&!S.alt)c.title=sel?`Clear the selected steps, ${say} (Delete). Alt: the whole pattern`:"Clear: Sequence, the selected track's page shown (Alt: the whole pattern); Sound, the machine; Song, the row"}
+
+/* ---- the page's copy of what it put on the core's clipboard (CLIP, 130-main.js): a block of rows, so a paste
+   says at once where it lands and whether a row fits the track's kind; a block of one row is a page too ---- */
+function clipOf(x){const rows=[];
+ for(let t=x.t;t<x.t+x.n;t++){const tr=trk(t);rows.push({midi:isMidiT(t),steps:tr.steps.slice(x.from,x.to).map(v=>v&&JSON.parse(JSON.stringify(v))),slide:[...tr.slide].filter(s=>s>=x.from&&s<x.to).map(s=>s-x.from),
+  locks:[...S.locks].filter(([k])=>+k.split("|")[0]===t).map(([k,m])=>[k.split("|")[1],[...m].filter(([s])=>s>=x.from&&s<x.to).map(([s,v])=>[s-x.from,v])])})}
+ const r=rows[0];return x.n===1?{type:"page",midi:r.midi,steps:r.steps,slide:r.slide,locks:r.locks,length:x.to-x.from,rows}:{type:"block",length:x.to-x.from,rows}}
+const clipSize=()=>CLIP&&CLIP.rows?{tracks:CLIP.rows.length,length:CLIP.length}:null;
+
+/* ---- the operations (⌘C ⌘X ⌘V ⌘D Delete Enter, the drop, the step menu): each one undo step; the result's note says what was done ---- */
+const selArgs=x=>({t:x.t,n:x.n,from:x.from,to:x.to});
+function selCopy(){const x=selShown();if(!x)return false;CLIP=clipOf(x);edit("copySteps",selArgs(x));toast(`Copied ${selSay(x)}.`);return true}
+function selCut(){const x=selShown();if(!x)return false;CLIP=clipOf(x);edit("copySteps",selArgs(x));edit("clearSteps",selArgs(x));toast(`Cut ${selSay(x)}.`);return true}
+/* ⌘V at the selection: the copied block's first step on its first step and track */
+function selPaste(){const x=S.stepSel;if(!x)return false;const size=clipSize();
+ if(!size){toast(Modifiers.say("Copy some steps first: ⌘-click or ⌘-drag steps, then ⌘C."));return true}
+ if(x.from>=S.len){toast(`Step ${x.from+1} is past the pattern's length (${S.len}).`);return true}
+ const land=StepSel.landing(size,x.t,x.from,SEL_TRACKS,S.len);
+ if(!CLIP.rows.slice(0,land.n).some((r,k)=>r.midi===isMidiT(x.t+k))){toast("Synth steps paste onto synth tracks, MIDI steps onto MIDI tracks.");return true}
+ edit("pasteSteps",{t:x.t,from:x.from});setSel(land);return true}
+/* the block copied within the pattern: at its own end (⌘D), or where a ⌘-drag of it lets go */
+function selCopyTo(dt,at){const x=selShown();if(!x)return false;
+ if(at>=S.len){toast(`No room: the pattern is ${S.len} steps.`);return true}
+ edit("copyStepsTo",Object.assign(selArgs(x),{at,dt}));setSel(StepSel.landing({tracks:x.n,length:x.to-x.from},dt,at,SEL_TRACKS,S.len));return true}
+function selDuplicate(){const x=selShown();return x?selCopyTo(x.t,x.to):false}
+function selClear(){const x=selShown();if(!x)return false;edit("clearSteps",selArgs(x));return true}
+/* the selection's steps of each track as one steps intent (rows), after f changed the view's steps */
+function selSteps(x,f){const rows=[];for(let t=x.t;t<x.t+x.n;t++){f(t,trk(t));rows.push(rangeRow(t,x.from,x.to))}edit("steps",{from:x.from,to:x.to,rows});renderTop();rerenderSeq()}
+/* Enter, the step menu's Trig: a note on every empty selected step (the track's last pitch), or, when none is empty,
+   every selected note off (a NOTE OFF stays) */
+function selTrigs(){const x=selShown();if(!x)return false;let on=false;
+ for(let t=x.t;t<x.t+x.n;t++)for(let s=x.from;s<x.to;s++)if(!trk(t).steps[s])on=true;
+ selSteps(x,(t,tr)=>{for(let s=x.from;s<x.to;s++){const st=tr.steps[s];if(on){if(!st)tr.steps[s]=note(lastNote(t,s))}else if(st&&!st.off){tr.steps[s]=null;tr.slide.delete(s);clearStepLocks(t,s)}}});
+ return true}
+/* the step menu's marks: NOTE OFF on every selected step (off again when each is one), the envelope trigs off
+   (trigless) or on for every selected note, a slide on every selected step with a note (off when each has one) */
+function selMark(kind){const x=selShown();if(!x)return false;const cells=[];
+ for(let t=x.t;t<x.t+x.n;t++)for(let s=x.from;s<x.to;s++)cells.push([t,s,trk(t).steps[s]]);
+ if(kind==="noteoff"){const on=cells.some(([,,st])=>!st?.off);selSteps(x,(t,tr)=>{for(let s=x.from;s<x.to;s++){tr.steps[s]=on?{off:1}:tr.steps[s]?.off?null:tr.steps[s];if(on){tr.slide.delete(s);clearStepLocks(t,s)}}});return true}
+ const notes=cells.filter(([t,,st])=>st&&!st.off&&(kind!=="trigless"||!isMidiT(t)));
+ if(!notes.length){toast(kind==="slide"?"No note to slide there: a slide needs a note.":"No synth note there: trigless is a synth track's note without its envelopes.");return true}
+ if(kind==="trigless"){const on=notes.some(([,,st])=>stepKind(st)!=="trigless");selSteps(x,(t,tr)=>{for(const[nt,s,st] of notes)if(nt===t)Object.assign(st,on?{a:0,f:0,l:0}:{a:1,f:1,l:1})});return true}
+ const on=notes.some(([t,s])=>!trk(t).slide.has(s));for(const[t,s] of notes)if(trk(t).slide.has(s)!==on){on?trk(t).slide.add(s):trk(t).slide.delete(s);edit("slide",{t,s,on})}rerenderSeq();return true}
+/* the step menu's chord note: the pitch right-clicked in the roll joins the step's notes */
+function selChord(t,s,pitch){const st=trk(t).steps[s];if(!st?.n||st.n.includes(pitch))return;st.n.push(pitch);editStep(t,s);rerenderSeq()}
+
+/* ---- the pointer: the cell under it (a roll column, a trig row's step, the ruler's number), the gesture ---- */
+function selCellOf(e){const el=document.elementFromPoint(e.clientX,e.clientY);if(!el)return null;
+ const r=el.closest("#seq .ruler .rul[data-s]");if(r)return{t:S.sel,s:+r.dataset.s,ruler:true};
+ const tc=el.closest("#seq .tlane [data-s]");if(tc)return{t:S.sel,s:+tc.dataset.s};
+ const c=el.closest("#seq canvas.roll[data-big]");if(c&&+c.dataset.t===S.sel){const G=laneGeom(c);if(onKeys(c,G,e))return null;const h=laneHit(c,e);if(h)return{t:S.sel,s:h.cell,pitch:h.n}}
+ return null}
+let selDrag=null;
+document.addEventListener("pointerdown",e=>{if(e.button!==0||S.ws!=="seq")return;
+ const inSeq=!!e.target.closest?.("#seq"),c=inSeq?selCellOf(e):null;
+ /* a press in the workspace outside the steps (the lock lane, the GEN bar, a dock) ends the selection; the top bar and the rail keep it */
+ if(!c){if(!inSeq&&e.target.closest?.("#main"))clearSel();return}
+ const d=StepSel.start({cmd:Modifiers.cmd(e),shift:e.shiftKey,alt:e.altKey,ctrl:e.ctrlKey},{t:c.t,s:c.s},!!c.ruler,S.stepSel,S.sel);
+ /* a press that edits (a note, a chord note, an erase, a trig row's paint) ends the selection; Ctrl on a Mac is the step menu's */
+ if(!d){if(!e.metaKey&&!e.ctrlKey)clearSel();return}
+ if(S.rec){toast("Wait until live recording stops.");return}
+ selDrag=d;e.preventDefault();e.stopPropagation()},true);
+document.addEventListener("pointermove",e=>{const d=selDrag;if(!d)return;if(e.buttons===0&&e.pointerType==="mouse"){endSelect();return}
+ const c=selCellOf(e);if(!c||c.s===d.at.s)return;
+ selDrag=Object.assign({},d,{at:{t:d.at.t,s:c.s},moved:true});
+ const w=StepSel.during(selDrag,S.stepSel,S.len,SEL_TRACKS);if(w.ghost)syncSel(w.ghost);else{S.stepSel=w.sel;syncSel()}});
+function endSelect(){const d=selDrag;if(!d)return;selDrag=null;
+ if(d.moved){const eat=e=>{e.stopPropagation();e.preventDefault()};addEventListener("click",eat,{capture:true,once:true});setTimeout(()=>removeEventListener("click",eat,true),0)}
+ const r=StepSel.end(d,S.stepSel,S.len,SEL_TRACKS);
+ if(r.drop){syncSel();selCopyTo(r.drop.t,r.drop.from);return}
+ setSel(r.sel);toast(Modifiers.say(`Selected ${selSay(r.sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete (or Copy, Clr, Paste above) · right-click: more`))}
+document.addEventListener("pointerup",endSelect);document.addEventListener("pointercancel",endSelect);addEventListener("blur",endSelect);
+
+/* ---- moving it: ← → a step, ↑ ↓ a track of the side (the selected track follows a one-track selection), ⇧← ⇧→ longer ---- */
+function selToPage(){const x=S.stepSel;if(!x||S.viewAll)return;const p=Math.floor(x.from/16);if(p!==S.page&&p<pages16()){S.page=p;render()}}
+function selMove(dt,ds){const x=S.stepSel;if(!x)return;const base=x.t<6?0:6,y=StepSel.moved(Object.assign({},x,{t:x.t-base}),dt,ds,S.len,6);y.t+=base;
+ setSel(y);if(x.n===1&&y.t!==S.sel)select(y.t);selToPage()}
+function selGrow(ds){const x=S.stepSel;if(!x)return;setSel(StepSel.grown(x,ds,S.len))}
+
+/* ===== the step menu (right-click a step in the roll or a trig row; Ctrl-click on a Mac): every step and selection
+   action with its key, the fill's home. On a selected step it acts on the selection, on another it selects that
+   step first. The Monomachine's marks: trig, NOTE OFF, trigless, slide, and in the roll a chord note at the pitch. ===== */
+const keyOf=id=>StepSel.keyOf(Keys,id);
+function stepMenuItems(t,s,pitch){const x=S.stepSel,st=trk(t).steps[s],one=StepSel.one(x),midi=isMidiT(t);
+ const marks=[{id:"sel-trigs",label:one?(st&&!st.off?"Note off":"Note on"):"Notes on / off",key:keyOf("sel-trigs"),run:()=>selTrigs()},
+  {id:"step-note-off",label:"NOTE OFF",key:"",run:()=>selMark("noteoff")},
+  ...(midi?[]:[{id:"step-trigless",label:"Trigless (no envelope trigs)",key:"",run:()=>selMark("trigless")}]),
+  {id:"step-slide",label:"Slide",key:"",run:()=>selMark("slide")},
+  ...(one&&pitch!=null&&st?.n&&!st.n.includes(pitch)?[{id:"step-chord",label:`Chord note ${noteName(pitch)}`,key:keyOf("roll-chord"),run:()=>selChord(t,s,pitch)}]:[])];
+ return StepSel.menuItems({marks,copy:()=>selCopy(),cut:()=>selCut(),paste:()=>selPaste(),canPaste:!!clipSize(),duplicate:()=>selDuplicate(),clear:()=>selClear(),
+  fill:n=>fillEvery(t,s,n,pitch??lastNote(t,s)),key:keyOf})}
+function stepMenu(t,s,pitch,x,y){if(!inSel(t,s))setSel({t,n:1,from:s,to:s+1});
+ DeskMenu.open(stepMenuItems(t,s,pitch),x,y,{title:StepSel.menuTitle(S.stepSel,t,s,selName)})}
+document.addEventListener("contextmenu",e=>{if(S.ws!=="seq"||!e.target.closest?.("#seq"))return;const c=selCellOf(e);if(!c||c.ruler)return;
+ e.preventDefault();if(S.rec){toast("Wait until live recording stops.");return}stepMenu(c.t,c.s,c.pitch,e.clientX,e.clientY)});
+
+/* ---- the keys: both editors' (StepSel.bind); on Sequence while there is a selection, no dialog, and no other control has the focus ---- */
+const selKeys=()=>seqKeys()&&!!S.stepSel&&!document.activeElement?.closest?.("button:not(.tc),[role=button],[role=tab],[data-g],[data-gv],[role=slider],input,select,textarea");
+StepSel.bind(Keys,{seqKeys:()=>seqKeys(),has:()=>!!S.stepSel,selKeys,cut:selCut,duplicate:selDuplicate,trigs:selTrigs,deselect:clearSel,deselectWhen:()=>!S.marks.size,
+ selectAll:()=>{const t=side()[0];setSel({t,n:6,from:0,to:S.len});toast(Modifiers.say(`Selected ${selSay(S.stepSel)} · ⌘C copy · Delete clear · Esc`))},
+ move:ds=>selMove(0,ds),grow:selGrow,area:"Roll",
+ does:{"select-all":"Select every step of the six tracks shown (synth or MIDI) up to the length (then ⌘C copies them as a block)",
+  "sel-trigs":"A note on each empty selected step, or, when none is empty, the selected notes off (one undo step)",
+  "step-select":"Click (roll or trig rows): select the step (⌘V pastes there). Drag: select steps. Drag the selection: a copy where you let go",
+  "step-extend":"Click: extend the selection to the step (on another track's roll: the tracks between too)",
+  "ruler-select":"Click or drag: select steps of the selected track; ⇧-click extends",
+  "step-menu":"The step menu: note on / off, NOTE OFF, trigless, slide, a chord note (roll), copy, cut, paste here, duplicate, clear, fill every 2nd / 4th from it; on a selected step for the whole selection (Ctrl-click on a Mac)"}});
 
 /* ===== Gates, arpeggiator, transpose, trig setup (the dock under the note lane) ===== */
 const ARPM=["OFF","KEY","SID","ADD"],ARPP=["TRUE","UP","DOWN","CYCLE","RND"],SCALES=["---","FIX","MAJ","MIN"];
@@ -5627,6 +5920,138 @@ document.addEventListener("click",e=>{if(S.ws!=="control")return;const C=S.ctl;
  if(e.target.closest("#laddl")){const pid=$("#lp").value,t=C.addT;if(C.links.some(l=>l.src===C.sel&&l.t===t&&l.pid===pid)){toast("Already a target.");return}C.links.push({src:C.sel,t,pid,min:0,max:127,curve:"lin",inv:false});ctlChanged();render();return}
  const as=e.target.closest("[data-addsrc]");if(as){const k=as.dataset.addsrc,n=C.sources.filter(x=>x.kind===k).length;const id=k+"X"+Date.now();C.sources.push(k==="lfo"?{id,kind:"lfo",label:"LFO "+"ABCDEFGH"[n],val:64,SHAPE:2,RATE:"1",DEPTH:80}:{id,kind:"rnd",label:"Random "+"ABCDEFGH"[n],val:64,RATE:"1/8",SMOOTH:0,_t:64});C.sel=id;ctlChanged();render();return}});
 document.addEventListener("change",e=>{if(e.target.id==="lt"){S.ctl.addT=+e.target.value;render()}});
+"use strict";
+/* The GLOBAL panel both editors share (B-051, F3; the Machinedrum Editor's v61 panel, P5, made shared): the machine's
+   own settings, kept in its active global slot, in one panel opened by the GLOBAL key in the top bar or GLOBAL… in the
+   engine menu (and the AUDIO panel's link). This file is the frame and the controls: the header with the 8 slots (the
+   active one lit; a click makes that one active), Reset to defaults (asked first), the cards' controls (GlobalUi), the
+   footer, placing, the GLOBAL key's light, Esc and a click outside. What a machine's global holds is its host's
+   (DeskGlobal.host, set by mdDeskGlobal.js and the Monomachine mockup's 117-global.js):
+     view()        the active global as the page shows it ({slot, ...}), or null while it is read
+     cards(G)      the cards' HTML; their controls carry data-ga (a click) or data-gsel (a select)
+     click(a, G)   a card's control was clicked (a: the element with data-ga)
+     change(s, G)  a card's select changed (optional)
+     slot(n)       make slot n the active one
+     reset()       the active slot becomes the machine's factory global
+     ask(html, yes)  the editor's question dialog (yes runs on the confirm key)
+     menu          where the settings are on the machine, for the header ("FUNCTION + PATTERN/SONG") */
+var GP = { open: false, note: 64 };
+const DeskGlobal = { host: null };
+const GlobalUi = {
+	tog: (f, on, tip, a = "ON", b = "OFF") => `<span class="seg" title="${tip}"><button data-ga="${f}" data-v="1" aria-pressed="${on}">${a}</button><button data-ga="${f}" data-v="0" aria-pressed="${!on}">${b}</button></span>`,
+	step: (f, label, tip) => `<span class="stepper" title="${tip}"><button data-ga="${f}" data-d="-1" aria-label="Less">−</button><b class="mono">${label}</b><button data-ga="${f}" data-d="1" aria-label="More">+</button></span>`,
+	row: (label, control, extra = "") => `<div class="grow2"><span class="ilab">${label}</span>${control}${extra}</div>`
+};
+const GRESET_TIP = "The active global slot back to how the machine shipped: MIDI channels, sync and the rest (asked first)";
+function drawGlobal() {
+	const pop = document.getElementById("globpop"), H = DeskGlobal.host;
+	if (!pop) return;
+	if (!GP.open || !H) { pop.hidden = true; return; }
+	const G = H.view();
+	if (!G) { pop.innerHTML = `<div class="libhead"><span class="cap">Global</span><span class="note">Reading the global settings from the machine…</span><button class="libx" data-ga="close">Esc</button></div>`; pop.hidden = false; placeGlobal(); return; }
+	pop.innerHTML = `<div class="libhead"><span class="cap">Global</span><span class="lcdchip">GLOBAL ${G.slot + 1}</span><span class="gslots" title="8 global setups; the lit one is active (SysEx 0x56)">${Array.from({ length: 8 }, (_, k) => `<button data-ga="slot" data-v="${k}" aria-pressed="${k === G.slot}">${k + 1}</button>`).join("")}</span><span class="note">${H.menu} on the machine. A change is stored and made active at once.</span><button class="amkey greset" data-ga="reset" title="${GRESET_TIP}">Reset to defaults</button><button class="libx" data-ga="close" title="Close (Esc)">Esc</button></div>
+ <div class="globgrid">${H.cards(G)}</div>
+ <div class="libfoot"><span>The GLOBAL key in the top bar or the engine menu opens it · Esc closes · every change is stored on the machine and made active</span><span class="fw" title="The machine keeps 8 global setups">GLOBAL ${G.slot + 1} of 8</span></div>`;
+	if (typeof enhanceSelects === "function") enhanceSelects(pop);
+	pop.hidden = false; placeGlobal();
+}
+function placeGlobal() {
+	const pop = document.getElementById("globpop"), r = document.querySelector(".lcdpanel").getBoundingClientRect(), top = Math.max(16, r.bottom + 8);
+	pop.style.top = (top + scrollY) + "px"; pop.style.maxHeight = Math.max(240, innerHeight - top - 12) + "px";
+	pop.style.left = Math.max(16, (document.documentElement.clientWidth - pop.offsetWidth) / 2 + scrollX) + "px";
+}
+function globKeyLit() { const k = document.getElementById("globkey"); if (k) { k.setAttribute("aria-pressed", String(GP.open)); k.classList.toggle("on", GP.open); const l = k.querySelector(".led"); if (l) l.classList.toggle("on", GP.open); } }
+function openGlobal() { if (typeof closeLib === "function") closeLib(false); GP.open = true; drawGlobal(); globKeyLit(); }
+function closeGlobal() { GP.open = false; drawGlobal(); globKeyLit(); }
+function globalClick(a) {
+	const H = DeskGlobal.host, f = a.dataset.ga;
+	if (f === "close") { closeGlobal(); return; }
+	const G = H && H.view(); if (!G) return;
+	if (f === "slot") { if (+a.dataset.v !== G.slot) H.slot(+a.dataset.v); return; }
+	if (f === "reset") {
+		H.ask(`Reset GLOBAL ${G.slot + 1} to the factory settings? MIDI channels, sync and the rest go back to how the machine shipped.`, () => H.reset());
+		return;
+	}
+	H.click(a, G);
+}
+document.addEventListener("click", e => {
+	if (e.target.closest && e.target.closest("#globkey")) { GP.open ? closeGlobal() : openGlobal(); e.stopPropagation(); return; }
+	if (!GP.open) return;
+	const pop = document.getElementById("globpop");
+	if (pop.contains(e.target)) { const a = e.target.closest("[data-ga]"); if (a) globalClick(a); return; }
+	if (!(e.target.closest && e.target.closest("#dlg,.kpop,#kpop,.lcdeng"))) closeGlobal();
+}, true);
+document.addEventListener("change", e => {
+	const s = e.target.closest && e.target.closest("#globpop [data-gsel]"), H = DeskGlobal.host;
+	if (s && H && H.change && H.view()) H.change(s, H.view());
+});
+addEventListener("resize", () => { if (GP.open) placeGlobal(); });
+Keys.bind({ id: "global-key", scope: "any", area: "Top bar", keys: ["GLOBAL key"], group: "Anywhere", does: "The machine's own settings, kept in its memory: MIDI channels, sync and the rest (also the engine menu: GLOBAL…)" });
+Keys.bind({ id: "close-global", short: "Close", scope: "any", keys: ["Escape"], group: "Anywhere", does: "Close the GLOBAL settings", when: () => GP.open, run: () => closeGlobal() });
+/* ===== GLOBAL: the machine's own settings (B-051, ROADMAP F3) =====
+   The Machinedrum Editor's GLOBAL panel, one implementation for both editors (skins/shared/deskGlobal.js: the slots,
+   Reset to defaults, the footer, the controls); this is the Monomachine's host of it. S.glob is the active global
+   as the page shows it (MmView's globPage: a channel 0-15, null OFF); a change is the globalMidi intent (the routing
+   mode: routing), stored in the active slot and made active; a slot key is HOST.globalSlot (SET ACTIVE GLOBAL).
+   Measured on OS 1.32B (mmDeskFirmwareTest spanprobe, globalprobe): track t listens on base + t while t < CHANNEL SPAN
+   and base + t is channel 15 or lower (16 reaches no track); CONTROL OUT's clock, Start/Stop and program change are
+   three bytes of the global; a program change is always taken in on the base channel. The MULTI MAP (the MD's map
+   editor's counterpart) is on Perform. */
+const GCH=c=>c==null?"OFF":String(c+1);
+const gTrackCh=(g,t)=>g&&g.base!=null&&t<g.span&&g.base+t<=14?g.base+t:null;
+const MM_GTIP={
+ base:"BASE CHANNEL: track t listens on base + t, for its sound values, mute and notes, while t is inside the CHANNEL SPAN (channel 16 reaches no track). OFF: no track takes any over MIDI",
+ span:"CHANNEL SPAN: how many tracks, from T1, have a MIDI channel of their own (6: all of them). 0: none, as in some old backups",
+ auto:"AUTO TRACK: notes on this channel play the selected track",
+ multiTrig:"MULTI TRIG: notes on this channel play the tracks as the kit's MULTI TRIG says (Perform)",
+ multiMap:"MULTI MAP: notes on this channel start patterns as the MULTI MAP says (Perform)",
+ pcIn:"Measured: the machine always takes a program change on its base channel (it selects a pattern); no setting turns it off",
+ pcOut:"Picking a pattern sends a program change on the base channel",
+ tempoIn:"INTERNAL: its own tempo. EXTERNAL: follows MIDI clock. In a DAW the plug-in sets EXT itself (it follows the host)",
+ ctrlIn:"React to MIDI Start, Stop and Continue. In a DAW the plug-in turns it on itself",
+ tempoOut:"Send MIDI clock",ctrlOut:"Send MIDI Start and Stop",
+ routing:"How the six tracks reach the outputs (also on Mix)"};
+/* "No track has …", "T3 has …", "T4, T5 and T6 have …" */
+function gNoChannel(none){if(!none.length)return"";const tail=one=>`: mutes and notes cannot reach ${one?"it":"them"}, and the editor sends ${one?"its":"their"} sound values as kit dumps.`;
+ if(none.length===6)return"No track has a MIDI channel of its own"+tail(false);
+ const names=none.map(t=>"T"+(t+1));
+ return none.length===1?names[0]+" has no MIDI channel of its own"+tail(true):names.slice(0,-1).join(", ")+" and "+names[names.length-1]+" have no MIDI channel of their own"+tail(false)}
+function mmGlobalCards(G){const{tog,step,row}=GlobalUi;
+ const none=[0,1,2,3,4,5].filter(t=>gTrackCh(G,t)==null),last=G.base==null?null:Math.min(G.base+G.span,15);
+ const baseLabel=G.base==null?"OFF":G.span&&last>G.base?`${G.base+1}–${last}`:String(G.base+1);
+ const warn=gNoChannel(none);
+ return`
+  <section class="card"><header><h3>Control</h3><span>MIDI</span></header>
+   ${row("Base channel",step("base",baseLabel,MM_GTIP.base))}
+   ${row("Channel span",step("span",String(G.span),MM_GTIP.span))}
+   ${warn?`<p class="gwarn">${warn}</p>`:""}
+   ${row("Auto track",step("auto",GCH(G.auto),MM_GTIP.auto))}
+   ${row("Multi trig",step("multiTrig",GCH(G.multiTrig),MM_GTIP.multiTrig))}
+   ${row("Multi map",step("multiMap",GCH(G.multiMap),MM_GTIP.multiMap))}
+   ${row("Prg change in",`<b class="mono" title="${MM_GTIP.pcIn}">BASE</b>`)}
+   ${row("Prg change out",tog("pcOut",G.programChangeOut,MM_GTIP.pcOut))}</section>
+  <section class="card"><header><h3>Sync</h3><span>clock and transport</span></header>
+   ${row("Tempo in",tog("tempoIn",G.clockIn,MM_GTIP.tempoIn,"EXT","INT"))}
+   ${row("Ctrl in",tog("ctrlIn",G.transportIn,MM_GTIP.ctrlIn))}
+   ${row("Tempo out",tog("tempoOut",G.clockOut,MM_GTIP.tempoOut))}
+   ${row("Ctrl out",tog("ctrlOut",G.transportOut,MM_GTIP.ctrlOut))}</section>
+  <section class="card"><header><h3>Routing</h3><span>the six tracks to the outputs</span></header>
+   ${row("Mode",`<span class="seg" title="${MM_GTIP.routing}">${ROUTES.map(r=>`<button data-ga="routing" data-r="${r}" aria-pressed="${S.routing===r}">${r.replace("+"," + ")}</button>`).join("")}</span>`)}</section>`}
+/* a channel stepper: OFF, 1 … 16 */
+const gStep=(c,d)=>{const i=Math.max(0,Math.min(16,(c==null?0:c+1)+d));return i===0?null:i-1};
+function mmGlobalClick(a,G){const f=a.dataset.ga,d=a.dataset.d!=null?+a.dataset.d:0,v=a.dataset.v!=null?+a.dataset.v:null;
+ if(f==="routing"){if(S.routing!==a.dataset.r){S.routing=a.dataset.r;edit("routing",{v:S.routing});render();drawGlobal()}return}
+ const toggles={pcOut:"programChangeOut",tempoIn:"clockIn",ctrlIn:"transportIn",tempoOut:"clockOut",ctrlOut:"transportOut"};
+ let args=null;
+ if(f==="span")args={span:Math.max(0,Math.min(16,G.span+d))};
+ else if(["base","auto","multiTrig","multiMap"].includes(f))args={[f]:gStep(G[f],d)};
+ else if(toggles[f])args={[toggles[f]]:v===1};
+ if(!args||Object.entries(args).every(([k,x])=>G[k]===x))return;
+ Object.assign(G,args);edit("globalMidi",args);drawGlobal()}
+DeskGlobal.host={view:()=>S.glob||null,cards:mmGlobalCards,click:mmGlobalClick,menu:"FUNCTION + KIT/SONG",
+ slot:n=>{if(HOST.globalSlot)return HOST.globalSlot(n);S.glob.slot=n;drawGlobal()},
+ reset:()=>edit("globalReset",{}),
+ ask:(html,yes)=>ask(html,[["Reset","danger",yes],["Cancel","",()=>{}]])};
 
 /* ===== Song (from the MD Editor, with the MM's per-row transpose, 6 + 6 mutes, 200 rows) ===== */
 const T64=()=>Array(12).fill(64);
@@ -6094,7 +6519,7 @@ function audioSend(c){if(HOST.audioSend)return HOST.audioSend(c);const D=AUD,say
 
 /* ===== Undo / redo: the host's, one step per gesture (the plug-in's core; on its own the demo host's snapshots,
    54-demo.js). A gesture ends on the events below, unless a drag, a hold or a GEN run or MUTATE trial holds it. ===== */
-function commit(){if(laneDraw||rollDrag||drag||active||arpDrag||paint||rotHold)return;genStale();if(genHeld())return;if(HOST.commit)HOST.commit()}
+function commit(){if(laneDraw||rollDrag||selDrag||drag||active||arpDrag||paint||rotHold)return;genStale();if(genHeld())return;if(HOST.commit)HOST.commit()}
 function undo(){genEnd();if(HOST.undo)HOST.undo()}
 function redo(){genEnd();if(HOST.redo)HOST.redo()}
 ["pointerup","keyup","click","change"].forEach(ev=>document.addEventListener(ev,()=>setTimeout(commit,0)));
@@ -6110,9 +6535,11 @@ function pastePage(t,a,b){const tr=trk(t);for(let i=a;i<b;i++){tr.steps[i]=CLIP.
 function editAssign(t,A){Object.entries(A.tabs).forEach(([tab,rows])=>rows.forEach((r,row)=>edit("assign",{t,src:ASRC[tab],row,page:r.pg,dest:r.d,add:r.add-64})));
  edit("assign",{t,mirror:!!A.mirr,hpf:!!A.hpf,lpf:!!A.lpf})}
 function secAction(kind){const t=S.sel,tr=trk(t);
- if(S.ws==="seq"){const[a,b]=vis(),where=`${tLabel(t)}, steps ${a+1}–${b}`;
-  if(kind==="copy"){CLIP={type:"page",midi:isMidiT(t),steps:tr.steps.slice(a,b).map(x=>x&&JSON.parse(JSON.stringify(x))),slide:[...tr.slide].filter(x=>x>=a&&x<b).map(x=>x-a),
-   locks:[...S.locks].filter(([k])=>+k.split("|")[0]===t).map(([k,m])=>[k.split("|")[1],[...m].filter(([s])=>s>=a&&s<b).map(([s,v])=>[s-a,v])])};edit("copySteps",{t,from:a,to:b});toast("COPY PAGE: "+where+".");return}
+ if(S.ws==="seq"){
+  /* a selection of steps (77-select.js) is what copy and clear take, and where paste puts the copied block (the marked tracks take a paste first) */
+  if(S.stepSel&&(kind!=="paste"||!S.marks.size)&&(kind==="copy"?selCopy():kind==="clear"?selClear():selPaste()))return;
+  const[a,b]=vis(),where=`${tLabel(t)}, steps ${a+1}–${b}`;
+  if(kind==="copy"){CLIP=clipOf({t,n:1,from:a,to:b});edit("copySteps",{t,from:a,to:b});toast("COPY PAGE: "+where+".");return}
   if(kind==="clear"){for(let i=a;i<b;i++){tr.steps[i]=null;tr.slide.delete(i);clearStepLocks(t,i)}edit("clearSteps",{t,from:a,to:b});render();toast("CLEAR PAGE: "+where+".");return}
   if(kind==="paste"){if(S.marks.size){pasteToMany();return}if(CLIP?.type!=="page"){toast("Copy a track page first.");return}if(CLIP.midi!==isMidiT(t)){toast("Track pages paste between synth tracks or between MIDI tracks.");return}
    const skip=pastePage(t,a,b);edit("pasteSteps",{t,from:a,to:b});render();toast("PASTE PAGE into "+where+"."+(skip?" "+skip+" lock(s) skipped: this machine has no such parameter.":""));return}}
@@ -6197,7 +6624,7 @@ document.addEventListener("pointerup",endPaint);document.addEventListener("point
 let drag=null,joyDrag=null,splitDrag=null,arpDrag=null;
 const main=$("#main");
 main.addEventListener("pointerdown",e=>{
- const pc=e.button===0&&!e.shiftKey&&!e.altKey&&!S.learn&&e.target.closest(".tc[data-tl],.tlane [data-env]");
+ const pc=e.button===0&&!e.shiftKey&&!e.altKey&&!e.metaKey&&!e.ctrlKey&&!S.learn&&e.target.closest(".tc[data-tl],.tlane [data-env]");
  if(pc){const s=+pc.dataset.s,tr=trk(S.sel),k=pc.dataset.tl||pc.dataset.env;const on=pc.dataset.tl?!(k==="sld"?tr.slide:tr.swing).has(s):!tr.steps[s]?.[k];paint={k,on,done:new Set()};try{main.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault();paintAt(pc);return}
  if(S.learn){const el=e.target.closest(".pc[data-g]");if(el&&(PAGES.includes(el.dataset.g)||el.dataset.g==="MID")){e.preventDefault();e.stopPropagation();const t=el.dataset.t!=null?+el.dataset.t:S.sel;S.learnT={t,pid:el.dataset.g+"."+el.dataset.n};toast(`Target: ${tLabel(t)} ${pidLabel(t,S.learnT.pid)}. Now press 1-8 for a knob.`);if(HOST.learnTarget)HOST.learnTarget({...S.learnT});return}}
  const h=e.target.closest(".lfohandle");if(h){cordStart(e,h);return}
@@ -6238,7 +6665,7 @@ function endDrag(e){trnUp();if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(a
    is heard on the whole document, a move with no button down ends it too, and so does leaving the window. */
 document.addEventListener("pointerup",endDrag);document.addEventListener("pointercancel",endDrag);
 window.addEventListener("blur",()=>{if(dragging())endDrag({clientX:-1,clientY:-1})});
-const dragging=()=>!!(drag||active||laneDraw||arpDrag||joyDrag||splitDrag||rollDrag||kbDown||cord);
+const dragging=()=>!!(drag||active||laneDraw||arpDrag||joyDrag||splitDrag||rollDrag||selDrag||kbDown||cord);
 function joyAt(e){const r=$("#joy").getBoundingClientRect();S.joy={x:clamp((e.clientX-r.left)/r.width*2-1,-1,1),y:clamp(1-(e.clientY-r.top)/r.height*2,-1,1)};const k=$("#knobj");k.style.left=(50+S.joy.x*42)+"%";k.style.top=(50-S.joy.y*42)+"%";
  const tr=S.tracks[asgT()],A=tr.assign,rows=A.tabs[S.asTab];const amt=S.asTab==="JOY U"?Math.max(0,S.joy.y):S.asTab==="JOY D"?Math.max(0,-S.joy.y):A.mirr?S.joy.x:Math.max(0,S.joy.x);
  $("#kbinfo")&&($("#kbinfo").textContent=rows.map(r=>`${LPAGES[r.pg]} ${destNames(asgT(),r.pg)[r.d]} ${Math.round((r.add-64)*amt)>=0?"+":""}${Math.round((r.add-64)*amt)}`).join(" · "));tx();if(HOST.joy)HOST.joy(S.joy)}
@@ -6338,7 +6765,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=trk(S.sel);
  if(id==="romfile"){checkRom(e.target.files[0]);return}
  if(id==="songsel"){if(HOST.songSlot)return HOST.songSlot(+v);S.songs.slot=+v;S.songSlot=+v;render();return}
- if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;if(HOST.romManage)HOST.romManage();else firstRun();return}
+ if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="global"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openGlobal();return}if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;if(HOST.romManage)HOST.romManage();else firstRun();return}
   S.engine=v;S.pend=0;renderPst();if(HOST.engine)HOST.engine(v);else startEngine(v);return}
  let m=id.match(/^lp(\d)$/);if(m){editTrack(S.sel,()=>{const l=V("LF"+m[1]);l[0]=+v;l[1]=0});render();return}
  m=id.match(/^ld(\d)$/);if(m){editTrack(S.sel,()=>{V("LF"+m[1])[1]=+v});render();return}
@@ -6358,8 +6785,8 @@ Keys.bind({id:"close-dialog",scope:"any",keys:["Escape"],group:"Anywhere",does:"
 Keys.bind({id:"undo",scope:"any",keys:["Z"],mod:"cmd",group:"Anywhere",does:"Undo",modal:"panel",run:()=>undo()});
 Keys.bind({id:"redo",scope:"any",keys:["Z"],mod:"cmd+shift",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
 Keys.bind({id:"redo-y",scope:"any",keys:["Y"],mod:"cmd",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
-Keys.bind({id:"copy",scope:"any",keys:["C"],mod:"cmd",group:"Anywhere",does:"Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",run:()=>secAction("copy")});
-Keys.bind({id:"paste",scope:"any",keys:["V"],mod:"cmd",group:"Anywhere",does:"Paste (Sequence: into every track marked for paste too)",run:()=>secAction("paste")});
+Keys.bind({id:"copy",scope:"any",keys:["C"],mod:"cmd",group:"Anywhere",does:"Copy (Sequence: the selected steps, or the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",run:()=>secAction("copy")});
+Keys.bind({id:"paste",scope:"any",keys:["V"],mod:"cmd",group:"Anywhere",does:"Paste (Sequence: at the selected step, the block from its first step and track; into every track marked for paste)",run:()=>secAction("paste")});
 Keys.bind({id:"leave-learn",scope:"control",keys:["Escape"],group:"Anywhere",does:"Leave LEARN",mapping:true,when:()=>S.mapping&&S.learn,run:()=>leaveLearn()});
 Keys.bind({id:"learn-knob",scope:"control",keys:["1 – 8"],group:"Anywhere",does:"LEARN: the controller knob for the value clicked",mapping:true});
 Keys.bind({id:"audio-settings",scope:"any",keys:[","],group:"Anywhere",does:"AUDIO / MIDI settings (also in the engine menu)"});
@@ -6367,7 +6794,8 @@ Keys.bind({id:"play-stop",scope:"any",keys:["Space"],group:"Transport",does:"Pla
 Keys.bind({id:"record",scope:"any",keys:["Space"],code:"Space",mod:"alt",group:"Transport",does:"Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\". Again: recording off",run:()=>liveRecord()});
 ["seq","sound","mix","perform","song","control"].forEach((ws,i)=>Keys.bind({id:"workspace-"+(i+1),scope:"any",keys:[String(i+1)],group:"Workspaces",does:["Sequence","Sound","Mix","Perform","Song","Control"][i],mapping:ws==="control",when:ws==="control"?()=>S.mapping:null,run:()=>goWs(ws)}));
 Keys.bind({id:"page-prev-next",scope:"seq",keys:["[","]"],group:"Sequence",does:"Previous / next page",when:()=>S.ws==="seq"&&pages16()>1,run:e=>{const n=pages16();S.viewAll=false;S.page=(S.page+(e.key==="]"?1:-1)+n)%n;render()}});
-Keys.bind({id:"delete",scope:"seq song",keys:["Delete","Backspace"],group:"Sequence",does:"Clear the page shown of the selected track (Song: delete the row)",when:()=>S.ws==="song"||S.ws==="seq",run:()=>S.ws==="song"?songAction("del"):secAction("clear")});
+Keys.bind({id:"delete",scope:"seq song",keys:["Delete","Backspace"],group:"Sequence",does:"Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row",when:()=>S.ws==="song"||S.ws==="seq",
+ run:()=>S.ws==="song"?songAction("del"):S.stepSel?secAction("clear"):toast(Modifiers.say("Nothing selected: ⌘-click or ⌘-drag steps first. Clr clears the page shown, ⌥Delete the whole pattern."))});
 Keys.bind({id:"clear-pattern",scope:"seq",keys:["Delete","Backspace"],mod:"alt",group:"All",does:"Sequence: clear the whole pattern: every track's notes, slides and locks (one undo step)",when:()=>S.ws==="seq",run:()=>clearPattern()});
 Keys.bind({id:"clr-key-all",scope:"any",area:"Top bar",keys:["CLR"],mod:"alt",group:"All",does:"Click: clear the whole pattern, every track's notes, slides and locks (one undo step)"});
 Keys.bind({id:"song-row",scope:"song",keys:["ArrowLeft","ArrowRight"],group:"Song",does:"Previous / next row",when:()=>S.ws==="song",run:e=>{S.songSel=clamp(S.songSel+(e.key==="ArrowRight"?1:-1),0,S.song.length-1);render()}});
@@ -6552,6 +6980,7 @@ function show(v,all){
   for(const[k,f] of [["tracks",[...KIT_F,...SEQ_F]],["midi",[...MIDI_KIT_F,...SEQ_F]]])if(v[k])v[k].forEach((x,t)=>{const y=was[k]?.[t]||{};for(const n of f)if(put(S[k][t],n,x[n],y[n])){doc=true;if(SEQ_F.includes(n))seq=true}});
   for(const k of["len","mult","swingAmt","patTrn","locks"])if(put(S,k,v[k],was[k])){doc=true;seq=true}
   for(const k of["multi","menv","routing","plays"])if(put(S,k,v[k],was[k]))doc=true;
+  if(put(S,"glob",v.glob,was.glob)&&GP.open)drawGlobal();
   if(put(S,"workName",v.workName,was.workName))top=true;
   for(const k of["pat","kit","queued","bpm","hostTempo"])if(put(S,k,v[k],was[k]))top=true;
   if(v.kitState!==undefined&&v.kitState!==was.kitState){setKitState(v.kitState);top=true}
@@ -6571,13 +7000,13 @@ function show(v,all){
  if(busyNow()){showLater=true;return}
  showLater=false;render();drawLib()}
 /* busy: a gesture, or a menu open (a render would close it under the person: the drawing waits for it, as for a drag) */
-const busyNow=()=>{try{return !!(S.genEnding||drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown||paint)||menuOpen()}catch(_){return false}};
+const busyNow=()=>{try{return !!(S.genEnding||drag||laneDraw||rollDrag||selDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown||paint)||menuOpen()}catch(_){return false}};
 /* RECORD as the machine is in it: "off" | "grid" | "live" */
 function setRecord(mode){const on=mode==="grid"||mode==="live";S.recMode=mode;if(!!S.rec!==on){S.rec=on;renderTop()}const b=$("#rec");if(b)b.title=mode==="live"?"LIVE RECORDING: notes you play are recorded. Click to stop recording.":mode==="grid"?"GRID RECORDING: the machine's TRIG keys write steps. Click to leave.":"RECORD: stopped = GRID RECORDING, playing = LIVE RECORDING (the keyboard's notes are recorded)."}
 /* an engine state's LCD label: [text, led "on" | "blink" | "off", tooltip] */
 function setEngineLabel(st,label){ENG[st]=label;if(S.eng===st)setEng(st)}
 /* a host's engine map ([{id, label, available, reason}]) in the engine menu, before the menu's own entries */
-function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const own=["audio","rom"];
+function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const own=["audio","global","rom"];
  for(const o of [...sel.options])if(!own.includes(o.value)&&!list.some(e=>e.id===o.value))o.remove();
  const first=[...sel.options].find(o=>own.includes(o.value))||null;
  for(const e of list){let o=sel.querySelector(`option[value="${e.id}"]`);if(!o){o=document.createElement("option");o.value=e.id}sel.insertBefore(o,first);o.textContent=e.label;o.disabled=!e.available;o.title=e.available?"":e.reason||""}
@@ -7395,6 +7824,16 @@ const MmView = (() => {
 		return Array.from({ length: 12 }, (_, i) => { const b = bits[i < 6 ? 0 : 1]; return b == null ? null : !!((b >> (i % 6)) & 1); });
 	}
 
+	const chOf = c => c != null && c >= 0 && c <= 15 ? c : null;
+	function globPage(slot, g) {
+		const c = g.channels || {}, i = g.controlIn || {}, o = g.controlOut || {};
+		return { slot, base: chOf(c.base), span: c.span ?? 0, auto: chOf(c.auto), multiTrig: chOf(c.multiTrig), multiMap: chOf(c.multiMap),
+			clockIn: i.tempoSync === 1, transportIn: i.transport === 1, clockOut: o.clock !== 0, transportOut: o.transport !== 0, programChangeOut: !!o.programChange };
+	}
+	/* B-051: the channel the machine takes track t's CCs, mutes and notes on, or null (elektronData::mmTrackChannel,
+	   measured on OS 1.32B: base + t while t < CHANNEL SPAN and base + t is 0-14; channel 16 reaches no track) */
+	const trackChannel = (glob, t) => glob && glob.base != null && t < glob.span && glob.base + t <= 14 ? glob.base + t : null;
+
 	function derive(docs, ui = {}) {
 		const m = docs.machine || null;
 		const pat = slotIn(m, "pattern"), kit = slotIn(m, "kit"), song = ui.songEdit ?? slotIn(m, "song"), glob = slotIn(m, "global");
@@ -7414,6 +7853,8 @@ const MmView = (() => {
 		const H = ui.host;
 		v.hostTempo = !!(H && H.follows && H.bpm > 0 && global && global.controlIn && global.controlIn.tempoSync === 1);
 		if (v.hostTempo) v.bpm = H.bpm;
+		/* B-051, F3: the GLOBAL page's MIDI part, the active global's (a channel 0-15, null OFF) */
+		if (global) v.glob = globPage(glob, global);
 		const kd = kitDocOf(docs, kit), pd = pat != null ? docs.patterns[pat] || null : null;
 		/* the view shows the machine once the current pattern and the kit that plays are there */
 		v.ready = !!(kd && pd);
@@ -7474,6 +7915,44 @@ const MmView = (() => {
 		if (!st || st.off) for (const k of keysOf(v, t)) if (v.locks.get(k).has(s)) out.push([["locks", k, s], DELETE()]);
 		return out;
 	}
+	/* ---- a block of steps (DESIGN-step-selection.md §7; the core's takeSteps and putSteps, mmDeskEdit.cpp) ---- */
+	/* tracks t to t + n - 1, steps [from, to) of the view: per track its steps, slides and locks (page units) */
+	function blockOf(v, t0, n, from, to) {
+		const rows = [];
+		for (let t = t0; t < t0 + n; t++) {
+			const tr = trackOf(v, t), locks = [];
+			for (const k of keysOf(v, t)) {
+				const steps = [...v.locks.get(k)].filter(([s]) => s >= from && s < to).map(([s, x]) => [s - from, x]);
+				if (steps.length) locks.push([k.split("|")[1], steps]);
+			}
+			rows.push({ midi: t >= 6, steps: structuredClone(tr.steps.slice(from, to)), slide: [...tr.slide].filter(s => s >= from && s < to).map(s => s - from), locks });
+		}
+		return { kind: "steps", length: to - from, rows };
+	}
+	/* a block put down with its first step at `at` on track t0, `span` steps (past the block: cleared): it stops at the
+	   pattern's length and at M6, a row lands on a track of its kind only, a lock only on a step that holds one and of
+	   a parameter the track's machine has; what the steps under a row held goes, their locks too */
+	function putWrites(v, block, t0, at, span) {
+		const len = Math.max(2, Math.min(64, v.len)), end = Math.min(at + span, len), out = [];
+		if (at >= len) return out;
+		for (let r = 0; r < block.rows.length && t0 + r < 12; r++) {
+			const row = block.rows[r], t = t0 + r;
+			if (row.midi !== t >= 6) continue;
+			const on = new Set();
+			for (const k of keysOf(v, t)) for (const s of v.locks.get(k).keys()) if (s >= at && s < end) out.push([["locks", k, s], DELETE()]);
+			for (let s = at; s < end; s++) {
+				const rel = s - at, x = rel < row.steps.length ? stepVal(row.steps[rel]) : null, st = pageStep(x, t);
+				out.push([[...trackPath(t), "steps", s], st], [[...trackPath(t), "slide", s], row.slide.includes(rel)]);
+				if (st && !st.off) on.add(s);
+			}
+			for (const [pid, steps] of row.locks) {
+				const [pg, i] = pid.split(".");
+				if (t < 6 && pg === "SYN" && !MACH[v.tracks[t].m]?.p[+i]) continue;	// that machine has no such parameter
+				for (const [rel, x] of steps) if (at + rel < end && on.has(at + rel)) out.push([["locks", t + "|" + pid, at + rel], x]);
+			}
+		}
+		return out;
+	}
 	const ARP = { play: "PLAY", ojmp: "OJMP", mode: "MODE", length: "len" };
 	const rotStep = (s, by, len) => ((s + by) % len + len) % len;
 	const WRITES = {
@@ -7486,6 +7965,9 @@ const MmView = (() => {
 		legato: (v, c) => [[["tracks", c.t, "leg", { amp: "amp", filter: "flt", lfo: "lfo" }[c.env]], c.on ? 1 : 0]],
 		portamento: (v, c) => [[["tracks", c.t, "port"], c.v === "always" ? 0 : 1]],
 		routing: (v, c) => [[["routing"], c.v]],
+		globalMidi: (v, c) => ["base", "span", "auto", "multiTrig", "multiMap", "clockIn", "transportIn", "clockOut", "transportOut", "programChangeOut"]
+			.filter(k => c[k] !== undefined).map(k => [["glob", k], k === "span" ? c[k] : typeof c[k] === "boolean" ? c[k] : chOf(c[k])]),
+		globalReset: () => [],
 		midiTrack: (v, c) => [...(c.ch != null ? [[["midi", c.t, "ch"], c.ch + 1]] : []), ...(c.cc ? [[["midi", c.t, "cc"], c.cc.map(Number)]] : [])],
 		step: (v, c) => stepWrites(v, c.t, c.s, c.v),
 		slide: (v, c) => [[[...trackPath(c.t), "slide", c.s], !!c.on]],
@@ -7550,26 +8032,13 @@ const MmView = (() => {
 		},
 		clearSteps: (v, c) => {
 			const out = [];
-			for (let s = c.from; s < c.to; s++) out.push(...stepWrites(v, c.t, s, null), [[...trackPath(c.t), "slide", s], false]);
+			for (let t = c.t; t < c.t + (c.n || 1); t++) for (let s = c.from; s < c.to; s++) out.push(...stepWrites(v, t, s, null), [[...trackPath(t), "slide", s], false]);
 			return out;
 		},
 		copySteps: () => [],
 		/* the core's clipboard; the page shows the paste from its own copy of it (clip: MmView.copied) */
-		pasteSteps: (v, c, clip) => {
-			if (!clip || clip.kind !== "steps" || clip.midi !== c.t >= 6) return [];
-			const to = Math.min(64, c.to ?? c.from + clip.steps.length), out = [], on = new Set();
-			for (let s = c.from; s < to; s++) {
-				const rel = s - c.from, x = rel < clip.steps.length ? stepVal(clip.steps[rel]) : null;
-				out.push(...stepWrites(v, c.t, s, x), [[...trackPath(c.t), "slide", s], clip.slide.includes(rel)]);
-				if (x && !x.off) on.add(s);
-			}
-			for (const [pid, steps] of clip.locks) {
-				const [pg, i] = pid.split(".");
-				if (c.t < 6 && pg === "SYN" && !MACH[v.tracks[c.t].m]?.p[+i]) continue;	// that machine has no such parameter
-				for (const [rel, x] of steps) if (c.from + rel < to && on.has(c.from + rel)) out.push([["locks", c.t + "|" + pid, c.from + rel], x]);
-			}
-			return out;
-		},
+		pasteSteps: (v, c, clip) => clip && clip.kind === "steps" ? putWrites(v, clip, c.t, c.from, (c.to ?? c.from + clip.length) - c.from) : [],
+		copyStepsTo: (v, c) => putWrites(v, blockOf(v, c.t, c.n || 1, c.from, c.to), c.dt ?? c.t, c.at, c.to - c.from),
 		/* ---- Sound and Perform: the kit that plays ---- */
 		machine: (v, c) => machineWrites(v, c.t, C().machineName(c.model), c.keepFx !== false),
 		clearSound: (v, c) => machineWrites(v, c.t, "GND-SIN", false),
@@ -7707,15 +8176,7 @@ const MmView = (() => {
 	   shows at once (null: not a copy) */
 	function copied(v, cmd) {
 		if (!v || !v.ready) return null;
-		if (cmd.op === "copySteps") {
-			const tr = trackOf(v, cmd.t), locks = [];
-			for (const k of keysOf(v, cmd.t)) {
-				const steps = [...v.locks.get(k)].filter(([s]) => s >= cmd.from && s < cmd.to).map(([s, x]) => [s - cmd.from, x]);
-				if (steps.length) locks.push([k.split("|")[1], steps]);
-			}
-			return { kind: "steps", midi: cmd.t >= 6, steps: structuredClone(tr.steps.slice(cmd.from, cmd.to)),
-				slide: [...tr.slide].filter(s => s >= cmd.from && s < cmd.to).map(s => s - cmd.from), locks };
-		}
+		if (cmd.op === "copySteps") return blockOf(v, cmd.t, cmd.n || 1, cmd.from, cmd.to);
 		if (cmd.op === "copySound") return { kind: "sound", m: v.tracks[cmd.t].m, v: structuredClone(v.tracks[cmd.t].v) };
 		if (cmd.op === "copyRow" && v.song?.[cmd.i] && v.song[cmd.i].type !== "end") return { kind: "row", row: structuredClone(v.song[cmd.i]) };
 		return null;
@@ -7755,13 +8216,13 @@ const MmView = (() => {
 	const OPS = {
 		kit: ["level", "route", "input", "param", "trigPos", "legato", "portamento", "machine", "clearSound", "copySound", "pasteSound", "params",
 			"assign", "multiEnv", "multiTrig", "kitName"],
-		global: ["routing", "midiTrack", "multiMap", "multiMapSplit", "multiMapDelete"],
+		global: ["routing", "midiTrack", "globalMidi", "globalReset", "multiMap", "multiMapSplit", "multiMapDelete"],
 		song: ["rowSet", "rowInsert", "rowDelete", "rowMove", "copyRow", "pasteRow"],
 		library: ["patCopy", "patPaste", "patCopyTo", "patClear", "kitCopy", "kitPaste", "kitCopyTo", "kitClear", "kitRename"]
 	};
 	const KIND = new Map(Object.entries(OPS).flatMap(([kind, ops]) => ops.map(op => [op, kind])));
 	const kindOf = op => KIND.get(op) || "pattern";
 
-	return { derive, slotIn, queuedIn, kitDocOf, writes, copied, toFw, kindOf, own };
+	return { derive, slotIn, queuedIn, kitDocOf, writes, copied, toFw, kindOf, own, trackChannel };
 })();
 </script>

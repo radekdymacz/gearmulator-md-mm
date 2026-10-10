@@ -300,6 +300,7 @@ namespace mmDesk
 		const Arg page{"page", ArgType::Integer, 0, 7, true};
 		const Arg i8{"i", ArgType::Integer, 0, 7};
 		const Arg from{"from", ArgType::Integer, 0, 63}, to{"to", ArgType::Integer, 1, 64};
+		const Arg rows{"n", ArgType::Integer, 1, 12, true};	// a block's tracks from t (a selection, steps x tracks)
 		static const CommandTable table({
 			// ---- the core: documents ----
 			{"ready", Owner::Core, Gate::None, -1, {}, "the page is up: everything is published once more", CoreOp::Ready},
@@ -321,6 +322,14 @@ namespace mmDesk
 			{"routing", Owner::Core, Gate::Input, G, {{"v", ArgType::Text, 0, 0, false, {"3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"}}}, "the routing mode"},
 			{"midiTrack", Owner::Core, Gate::Input, G, {t6, {"ch", ArgType::Integer, 0, 15, true}, {"cc", ArgType::Array, 0, 0, true}},
 				"a MIDI sequencer track's channel and its CL1-4 CC numbers (four of 0-127, 128 = AFT)"},
+			// B-051, F3: the GLOBAL page's MIDI part (manual 1-89, 1-91): the active global's MIDI CHANNELS and CONTROL IN
+			{"globalMidi", Owner::Core, Gate::Input, G, {{"base", ArgType::IntegerOrNull, 0, 15, true}, {"span", ArgType::Integer, 0, 16, true},
+				{"auto", ArgType::IntegerOrNull, 0, 15, true}, {"multiTrig", ArgType::IntegerOrNull, 0, 15, true},
+				{"multiMap", ArgType::IntegerOrNull, 0, 15, true}, {"clockIn", ArgType::Bool, 0, 0, true}, {"transportIn", ArgType::Bool, 0, 0, true},
+				{"clockOut", ArgType::Bool, 0, 0, true}, {"transportOut", ArgType::Bool, 0, 0, true}, {"programChangeOut", ArgType::Bool, 0, 0, true}},
+				"GLOBAL › MIDI: the active global's channels (0-15, null OFF; base + t is track t's while t < span), CONTROL IN"
+				" (clockIn: TEMPO SYNC EXT MIDI CLK, transportIn: TRANSPORT ACCEPT) and OUT (clock, Start/Stop, program change)"},
+			{"globalReset", Owner::Core, Gate::Input, G, {}, "GLOBAL › Reset to defaults: the active global becomes the one the machine ships with (measured, mmDeskFirmwareTest factoryglobal)"},
 			// ---- the edit intents: Sequence (a pattern) ----
 			{"step", Owner::Core, Gate::Input, P, {p, t12, step, {"v", ArgType::Any}},
 				"a step's value: null empty, {off:true} a NOTE OFF, {n:[note...], a, f, l, notrig?} a trig (n: its pitch, chord notes after the base; a f l: AMP FILTER LFO)"},
@@ -346,10 +355,14 @@ namespace mmDesk
 			{"arp", Owner::Core, Gate::Input, P, {p, t12, {"field", ArgType::Text, 0, 0, false, {"play", "ojmp", "mode", "range", "speed", "trigs", "length", "step"}},
 				{"v", ArgType::Integer, 0, 255}, {"i", ArgType::Integer, 0, 15, true}},
 				"ARPEGGIATOR, a field in firmware units (step i: 64 + offset, 255 muted)"},
-			{"clearSteps", Owner::Core, Gate::Input, P, {p, t12, from, to}, "a track's steps, slides and locks in [from, to)"},
-			{"copySteps", Owner::Core, Gate::Input, P, {p, t12, from, to}, "a track page to the clipboard"},
+			{"clearSteps", Owner::Core, Gate::Input, P, {p, t12, rows, from, to}, "the steps, slides and locks in [from, to) of tracks t to t + n - 1 (n 1 without it)"},
+			{"copySteps", Owner::Core, Gate::Input, P, {p, t12, rows, from, to},
+				"a block of steps (tracks t to t + n - 1, steps [from, to)) into the clipboard: notes, NOTE OFFs, envelope trigs, slides, locks"},
 			{"pasteSteps", Owner::Core, Gate::Input, P, {p, t12, from, {"to", ArgType::Integer, 1, 64, true}},
-				"the clipboard's page from step from; [from, to) is cleared first (default: the page's own length)"},
+				"the clipboard's block with its first step at from on track t; it stops at the pattern's length and M6, a row lands on a track"
+				" of its kind (synth or MIDI); to (a page): [from, to) is cleared past the block"},
+			{"copyStepsTo", Owner::Core, Gate::Input, P, {p, t12, rows, from, to, {"at", ArgType::Integer, 0, 63}, {"dt", ArgType::Integer, 0, 11, true}},
+				"a block of steps copied within the pattern to step at of track dt (its own track without dt), the clipboard untouched: duplicate, the ⌘-drag"},
 			// ---- the edit intents: Sound and Perform (the kit that plays) ----
 			{"machine", Owner::Core, Gate::Input, W, {k, t6, {"model", ArgType::Integer, 0, 255}, {"keepFx", ArgType::Bool, 0, 0, true}},
 				"a track's machine (model: its SysEx 0x5B id): its SYN page starts at the machine's defaults; without keepFx (default on) the other pages too"},
@@ -416,6 +429,7 @@ namespace mmDesk
 				"GRID RECORDING (RECORD), LIVE RECORDING (RECORD + PLAY) or off"},
 			{"hwSend", Owner::Machine, Gate::Input, -1, {}, "HW MIDI: the machine is on SYSEX RECV; send the dumps that wait for it"},
 			{"followHost", Owner::Machine, Gate::Input, -1, {}, "in a DAW: the active GLOBAL follows the host's clock and transport"},
+			{"globalSlot", Owner::Machine, Gate::Input, -1, {deskCore::slotArg<MmModel>("slot", Kind::Global)}, "the active GLOBAL slot (SET ACTIVE GLOBAL 0x56)"},
 			// MM-P8
 			{"chain", Owner::Machine, Gate::Input, -1, {{"patterns", ArgType::Array}}, "BANK held + TRIG keys: the machine's pattern chain"},
 			{"chainClear", Owner::Machine, Gate::Input, -1, {}, "BANK + the TRIG key of the pattern that plays: ends the chain"},

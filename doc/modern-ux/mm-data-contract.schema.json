@@ -839,6 +839,22 @@
             }
           }
         },
+        "controlOut": {
+          "type": "object",
+          "description": "B-051, measured (mmDeskFirmwareTest globalprobe): clock 1 sends MIDI clock; transport 1 sends MIDI Start/Stop; programChange not 0 sends a program change on the base channel when a pattern is picked. Missing in documents from before: then hidden.x07 holds all eleven bytes from 0x07.",
+          "additionalProperties": true,
+          "properties": {
+            "clock": {
+              "$ref": "#/$defs/byte"
+            },
+            "transport": {
+              "$ref": "#/$defs/byte"
+            },
+            "programChange": {
+              "$ref": "#/$defs/byte"
+            }
+          }
+        },
         "firmware": {
           "type": "object",
           "description": "P6, contract version 2: what the firmware carries that the editor passes through untouched (dump format bytes, residue, opaque state, undecoded bytes). Readers also take version 1, where these members sit at the top level.",
@@ -2641,6 +2657,116 @@
         },
         {
           "type": "object",
+          "description": "core: GLOBAL › MIDI: the active global's channels (0-15, null OFF; base + t is track t's while t < span), CONTROL IN (clockIn: TEMPO SYNC EXT MIDI CLK, transportIn: TRANSPORT ACCEPT) and OUT (clock, Start/Stop, program change)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "globalMidi"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "base": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "span": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "auto": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "multiTrig": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "multiMap": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "clockIn": {
+              "type": ["boolean", "integer"]
+            },
+            "transportIn": {
+              "type": ["boolean", "integer"]
+            },
+            "clockOut": {
+              "type": ["boolean", "integer"]
+            },
+            "transportOut": {
+              "type": ["boolean", "integer"]
+            },
+            "programChangeOut": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: GLOBAL › Reset to defaults: the active global becomes the one the machine ships with (measured, mmDeskFirmwareTest factoryglobal)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "globalReset"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "core: a step's value: null empty, {off:true} a NOTE OFF, {n:[note...], a, f, l, notrig?} a trig (n: its pitch, chord notes after the base; a f l: AMP FILTER LFO)",
           "required": ["op", "p", "t", "s", "v"],
           "properties": {
@@ -3196,7 +3322,7 @@
         },
         {
           "type": "object",
-          "description": "core: a track's steps, slides and locks in [from, to)",
+          "description": "core: the steps, slides and locks in [from, to) of tracks t to t + n - 1 (n 1 without it)",
           "required": ["op", "p", "t", "from", "to"],
           "properties": {
             "op": {
@@ -3222,6 +3348,11 @@
               "minimum": 0,
               "maximum": 11
             },
+            "n": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
             "from": {
               "type": "integer",
               "minimum": 0,
@@ -3237,7 +3368,7 @@
         },
         {
           "type": "object",
-          "description": "core: a track page to the clipboard",
+          "description": "core: a block of steps (tracks t to t + n - 1, steps [from, to)) into the clipboard: notes, NOTE OFFs, envelope trigs, slides, locks",
           "required": ["op", "p", "t", "from", "to"],
           "properties": {
             "op": {
@@ -3263,6 +3394,11 @@
               "minimum": 0,
               "maximum": 11
             },
+            "n": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
             "from": {
               "type": "integer",
               "minimum": 0,
@@ -3278,7 +3414,7 @@
         },
         {
           "type": "object",
-          "description": "core: the clipboard's page from step from; [from, to) is cleared first (default: the page's own length)",
+          "description": "core: the clipboard's block with its first step at from on track t; it stops at the pattern's length and M6, a row lands on a track of its kind (synth or MIDI); to (a page): [from, to) is cleared past the block",
           "required": ["op", "p", "t", "from"],
           "properties": {
             "op": {
@@ -3313,6 +3449,62 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a block of steps copied within the pattern to step at of track dt (its own track without dt), the clipboard untouched: duplicate, the ⌘-drag",
+          "required": ["op", "p", "t", "from", "to", "at"],
+          "properties": {
+            "op": {
+              "const": "copyStepsTo"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "at": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "dt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
             }
           },
           "additionalProperties": false
@@ -4630,6 +4822,32 @@
             },
             "force": {
               "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: the active GLOBAL slot (SET ACTIVE GLOBAL 0x56)",
+          "required": ["op", "slot"],
+          "properties": {
+            "op": {
+              "const": "globalSlot"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
             }
           },
           "additionalProperties": false
