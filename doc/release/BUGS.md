@@ -4,6 +4,13 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-054 · A project with a damaged flash image can hang the audio thread (seen once, in a probe)
+
+- **From:** the audio-thread spike checks, 2026-10-10: a probe loaded a project whose stored flash was corrupted on purpose at sector 6.
+- **What happens:** the audio thread hung for good while holding the device lock: the 68k pushed into DSP1's full host-port queue, which blocks on the same thread that would empty it. The DAW's audio stops.
+- **To check:** whether a real project can reach that state (a damaged or truncated save, a different firmware's state); the host-port push should not block on its own thread (refuse or drop with a log line instead); the state loader could check the flash image before using it.
+- **Status:** open; not seen with a real project.
+
 ## B-053 · Monomachine: after picking a pattern that links another kit, the editor still counts the old kit as playing
 
 - **From:** the 0.5 slice-3 firmware test (`mmDeskFirmwareTest notelength`, first draft), 2026-10-10, on the emulator; not seen by a tester yet.
