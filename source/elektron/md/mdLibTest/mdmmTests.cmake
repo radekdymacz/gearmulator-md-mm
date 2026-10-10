@@ -115,6 +115,10 @@ function(mdmm_add_lib_tests _dir)
 		set_tests_properties(mmAmpEnvelopeFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 600)
 		add_test(NAME mmKitEditsStayFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM} machine)
 		set_tests_properties(mmKitEditsStayFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 900)
+		# I-010: the piano roll's note lengths as the machine stores them (its own dump) and plays them (T1's gates from
+		# the output, M1's LEN on the MIDI out)
+		add_test(NAME mmNoteLengthFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM} notelength)
+		set_tests_properties(mmNoteLengthFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 600)
 	endif()
 	# B-031 on the Monomachine: the backup from MM_SYX, the ROM from GEARMULATOR_MM_FIRMWARE_BIN; skipped without them.
 	add_test(NAME mmSyxPickFirmwareTest COMMAND mmDeskFirmwareTest --env syxpick)

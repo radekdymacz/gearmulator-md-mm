@@ -1057,6 +1057,59 @@ Keys.bind({id:"keys-help",short:"This view",scope:"any",keys:["?"],group:"Help",
 Keys.bind({id:"keys-help-close",short:"Close",scope:"any",keys:["Escape"],group:"Help",does:"Close the keyboard view",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
 document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target)){pop.hidden=true;keyView?.reset()}},true);
 
+/* ---- 58-roll.js ---- */
+
+/* ===== Note lengths in the piano roll (I-010, 0.5): a note is a trig and where it ends, as the machine plays it =====
+   Pure: a track's steps (null, {off:1} or a trig {n, a, f, l}) and the pattern's length in, changes out ([step, value]
+   pairs and, on a MIDI track, a LEN lock); the page applies and sends them (70-seq.js). Measured on the firmware
+   (mmDeskFirmwareTest notelength, lenprobe):
+   - A synth track has no length: a note sounds from its trig to the next NOTE OFF or trig of the track, past the
+     pattern's end onto its start (a NOTE OFF on step 3 ends a note of step 29 of 32). A note of L steps is its trig
+     and a NOTE OFF L steps later; when a trig is there, the trig ends it.
+   - A MIDI track's note lasts LEN ticks (the MIDI page's LEN, lockable per step): 24 a quarter note, 6 a step at 1X
+     (LEN 1-126, at every tempo); LEN 127 lasts until a NOTE OFF trig. The track's next trig ends a note before its
+     LEN does, as on a synth track.
+   So a note can only be drawn up to the track's next trig; a NOTE OFF the drawn length no longer needs is taken away,
+   and a removed note leaves the note before it its length (a NOTE OFF where the removed one began). */
+const MmRoll=(()=>{
+ const TICKS=6,LEN_MAX=126,LEN_HOLD=127;
+ const trig=st=>!!st&&!st.off;
+ /* the steps after s, once round the pattern: k = s+1 .. s+len, each at index k % len */
+ function after(len,s,f){for(let k=s+1;k<=s+len;k++)if(f(k,k%len))return k;return null}
+ /* the next step with anything on it (a trig or a NOTE OFF), as an unwrapped step (s + len: none, the note plays until it comes round) */
+ const nextEvent=(steps,len,s)=>after(len,s,(k,i)=>!!steps[i])??s+len;
+ const nextTrig=(steps,len,s)=>after(len,s,(k,i)=>trig(steps[i]))??s+len;
+ /* the trig whose gate runs into step s (nothing between: no NOTE OFF, no trig), or null */
+ function before(steps,len,s){for(let k=1;k<len;k++){const i=((s-k)%len+len)%len,st=steps[i];if(st)return trig(st)?i:null}return null}
+ /* where a note ends, unwrapped steps from its trig. midi: {len: LEN} for a MIDI track's note (null: a synth track) */
+ function end(steps,len,s,midi){const e=nextEvent(steps,len,s);if(!midi||midi.len>=LEN_HOLD)return e;return Math.min(e,s+Math.max(1,midi.len)/TICKS)}
+ /* the NOTE OFF that ends the note on s, as a step index, or -1 */
+ function closer(steps,len,s){const e=nextEvent(steps,len,s);return e<s+len&&steps[e%len]?.off?e%len:-1}
+ /* the most a note on s can be drawn, in steps: up to the next trig (it ends the note) */
+ const room=(steps,len,s)=>nextTrig(steps,len,s)-s;
+ /* a note on s that lasts L whole steps: the step changes (and, midi, the LEN lock to set: a number, or null to
+    leave the kit's value when it is that already). NOTE OFFs between it and the next trig go; one goes where it ends
+    when that is before the next trig. midi: {kitLen} for a MIDI track */
+ function setLen(steps,len,s,L,midi){const r=room(steps,len,s);L=Math.max(1,Math.min(Math.round(L),r));const out=[];
+  const offs=[];after(len,s,(k,i)=>{if(k>=s+r)return true;if(steps[i]?.off)offs.push(i);return false});
+  let lock;if(midi){const v=L*TICKS<=LEN_MAX?L*TICKS:LEN_HOLD;lock=v===midi.kitLen?null:v}
+  const off=(!midi||lock===LEN_HOLD||(lock==null&&midi.kitLen===LEN_HOLD))&&L<r?(s+L)%len:-1;
+  for(const i of offs)if(i!==off)out.push([i,null]);if(off>=0&&!steps[off]?.off)out.push([off,{off:1}]);
+  return midi?{steps:out,len:lock,L}:{steps:out,L}}
+ /* a removed note: its step, and the NOTE OFF that ended it, go; the note before it keeps its length (a NOTE OFF where
+    the removed one began, when that note ran into it; on a MIDI track only when its LEN went past it: lenOf(step)) */
+ function remove(steps,len,s,lenOf){const out=[],c=closer(steps,len,s),p=before(steps,len,s);
+  const ranInto=p!=null&&p!==s&&(!lenOf||lenOf(p)>=LEN_HOLD||lenOf(p)/TICKS>((s-p)%len+len)%len);
+  out.push([s,ranInto?{off:1}:null]);if(c>=0&&c!==s)out.push([c,null]);return out}
+ /* the steps a selection of the note on s takes: from its trig to its end, its closing NOTE OFF too (so a copy carries
+    where it ends); not past the pattern's end */
+ function span(steps,len,s,midi){const c=closer(steps,len,s);const e=c>s?c+1:Math.min(len,Math.ceil(end(steps,len,s,midi)));return{from:s,to:Math.max(s+1,e)}}
+ /* the words of a length in steps, as a DAW says it at 1X (a step is a 1/16) */
+ function say(L){const q={1:"1/16",2:"1/8",3:"3/16",4:"1/4",6:"3/8",8:"1/2",12:"3/4",16:"1 bar",32:"2 bars",48:"3 bars",64:"4 bars"}[L];return q||L+" steps"}
+ /* the draw length key's steps, a click goes round them */
+ const LENGTHS=[1,2,4,8,16];
+ return{TICKS,LEN_MAX,LEN_HOLD,nextEvent,nextTrig,before,end,closer,room,setLen,remove,span,say,LENGTHS}})();
+
 /* ---- shared/deskModal.js ---- */
 "use strict";
 /* The modal layer (P7): one modal system for every dialog of both editors, one file for both editors and
@@ -2233,7 +2286,7 @@ function renderRail(){const r=$("#rail"),withSide=S.ws==="seq"||S.ws==="sound";
  const anyMs=[...S.tracks,...S.midi].some(x=>x.mute||x.solo);
  r.innerHTML=`<div class="railhead">Track<button class="iconkey allon" id="allon" ${anyMs?"":"disabled"} title="Unmute and unsolo every track (0)">M/S off</button></div>`+side().map(th).join("")+(withSide?`<div style="margin-top:4px">${sideSw()}</div>`:"")+(S.ws==="seq"?lockPicker(S.sel):"");altLabels()}
 function rowStatus(t){const tr=trk(t),arp=tr.arp.MODE>0,trn=tr.tr.TRACK-64;return[arp?"ARP":"",t<6&&tr.tr.SCALE?["","FIX","MAJ","MIN"][tr.tr.SCALE]:(trn?(trn>0?"+":"")+trn:"")].filter(Boolean).join(" ")}
-const ROLL_TIP=t=>`${tLabel(t)} notes. Click adds a note or moves its pitch · drag up or down for pitch · shift-click adds a chord note · drag a bar's end to move its ${isMidiT(t)?"LEN":"NOTE OFF"} · alt-click deletes a note, or sets a NOTE OFF on an empty step · ⌘-click or ⌘-drag selects steps · right-click: the step menu · scroll = pitch${isMidiT(t)?"":" · the keys on the left play the note"}${(()=>{const a=trk(t).arp;return a.MODE&&a.SPD?` · light notes: what the arpeggiator plays${a.PLAY===4?" (random order: outlined, the pitches vary)":""}`:""})()}`;
+const ROLL_TIP=t=>`${tLabel(t)} notes. ${S.rollDraw?`Draw (B): click adds a note of ${MmRoll.say(S.rollLen)}, drag sideways paints · up or down: pitch · shift-click adds a chord note`:`Select (B: draw): drag a box round notes · click a note selects it · drag the selection moves it (⌘-drag: a copy) · double-click adds a note · shift-click a note extends the selection`} · drag a note's end: its length (new notes get it too; a ${isMidiT(t)?"MIDI note's LEN, 6 a step":"NOTE OFF where it ends"}) · alt-click deletes a note (the one before keeps its length), or sets a NOTE OFF on an empty step · ⌘-click or ⌘-drag selects steps · right-click: the step menu · scroll = pitch${isMidiT(t)?"":" · the keys on the left play the note"}${(()=>{const a=trk(t).arp;return a.MODE&&a.SPD?` · light notes: what the arpeggiator plays${a.PLAY===4?" (random order: outlined, the pitches vary)":""}`:""})()}`;
 function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);dockOf(t);
  const rows=[["env",midi?"VEL":"Env"],["sld","Slide"],["swg","Swing"]];
  let h=`<div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}"><div class="rul"></div>${steps().map(s=>`<div class="rul ${gapC(s)} ${rulSel(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}</div>
@@ -2345,19 +2398,28 @@ ED.lane={draw(g,W,H,c){const G=laneGeom(c),t=G.t,tr=trk(t),ink=cssv("--ink");if(
     if(k===0){if(sp.pitchless){g.setLineDash([4,3]);g.strokeStyle=ink;g.lineWidth=1.5;g.strokeRect(x0+.5,y+.5,w-1,h-1);g.setLineDash([])}
      else if(sp.kind==="trigless"){g.strokeStyle=ink;g.lineWidth=G.big?2:1.5;g.strokeRect(x0+1,y+.5,w-2,h-1)}
      else{const am=ampSteps(t),ea=sp.s+am,cA=ea<G.b?G.col[Math.max(G.a,Math.floor(ea))]:null;let xa=x1;if(ea<sp.e&&ea>=G.a&&cA)xa=cA.x0+(ea-Math.floor(ea))*(cA.x1-cA.x0);else if(ea<G.a)xa=x0;g.globalAlpha*=va;g.fillStyle=ink;g.fillRect(x0,y,Math.max(0,xa-x0),h);g.globalAlpha=audible(t)?1:.45;if(xa<x1){g.fillStyle=inkA(.3);g.fillRect(xa,y,x1-xa,h)}if(sp.kind==="part"&&G.big){g.fillStyle=cssv("--lcd");g.fillRect(x0+4,y+h/2-1,6,2)}}
-     if(c0&&!sp.clipR&&G.big){g.fillStyle=cssv("--lcd");g.fillRect(x1-4,y+3,2,h-6)}}
+     if(c0&&!sp.clipR&&G.big&&!sp.wrap){g.fillStyle=cssv("--lcd");g.fillRect(x1-4,y+3,2,h-6)}
+     /* a gate past the pattern's end goes on at its start (I-010): the same bar, lighter, its end the handle */
+     const wr=sp.wrap?spanX(G,{s:0,e:sp.wrap}):null;if(wr){g.globalAlpha*=va*.55;g.fillStyle=ink;g.fillRect(wr[0],y,wr[1]-wr[0],h);g.globalAlpha=audible(t)?1:.45;if(G.big){g.fillStyle=cssv("--lcd");g.fillRect(wr[1]-4,y+3,2,h-6)}}}
     else if(midi){g.globalAlpha*=va;g.fillStyle=ink;g.fillRect(x0,y,w,h);g.globalAlpha=audible(t)?1:.45}else if(c0){const cw=c0.x1-c0.x0;g.strokeStyle=ink;g.lineWidth=G.big?1.5:1;g.strokeRect(c0.x0+.5,y+.5,cw-1,h-1);if(G.big){g.fillStyle=ink;g.beginPath();g.arc(c0.x0+cw/2,y+h/2,2.6,0,7);g.fill()}}});
    if(c0&&stepLocked(t,sp.s)){g.fillStyle=ink;g.fillRect(c0.x0+2,1,5,G.big?4:3)}
    if(G.big&&c0&&sp.n[0]>=G.lo&&sp.n[0]<=G.hi){const lab=tr.m==="DPRO-BBOX"?BBOX[sp.n[0]]:tr.m==="VO-6"?(()=>{const v=S.locks.get(lkKey(t,"SYN.4"))?.get(sp.s);return v!=null?CONS[v]:null})():null;if(lab){g.fillStyle=ink;g.font="8px Silkscreen, monospace";g.fillText(lab,c0.x0+2,Math.max(9,G.y(sp.n[0])-2))}}
    if(G.big&&midi&&c0&&S.locks.get(lkKey(t,"MID.1"))?.has(sp.s)){g.fillStyle=ink;g.font="8px Silkscreen, monospace";g.fillText("V"+velOf(t,sp.s),c0.x0+2,G.y(sp.n[0])-2)}});
-  G.vs.forEach(s=>{if(!tr.steps[s]?.off||!G.col[s])return;const x=G.col[s].x0;g.fillStyle=ink;g.fillRect(x,0,2,H);if(G.big){g.font="8px Silkscreen, monospace";g.fillText("OFF",x+4,10)}});
+  /* NOTE OFFs: one that ends a note is where its bar ends (a faint line); one that ends nothing is marked */
+  G.vs.forEach(s=>{if(!tr.steps[s]?.off||!G.col[s])return;const x=G.col[s].x0,ends=MmRoll.before(tr.steps,S.len,s)!=null;g.fillStyle=ends?inkA(.25):ink;g.fillRect(x,0,ends?1:2,H);if(G.big&&!ends){g.font="8px Silkscreen, monospace";g.fillText("OFF",x+4,10)}});
+  if(G.big&&S.rollBox&&S.rollBox.t===t){const b=S.rollBox,a0=Math.max(b.s0,G.a),a1=Math.min(b.s1,G.b-1),c0=G.col[a0],c1=G.col[a1];if(c0&&c1&&a1>=a0){const y0=G.y(Math.min(G.hi,b.n1)),y1=G.y(Math.max(G.lo,b.n0))+G.rh;g.save();g.fillStyle=inkA(.08);g.fillRect(c0.x0,y0,c1.x1-c0.x0,y1-y0);g.strokeStyle=ink;g.lineWidth=1.5;g.setLineDash([4,3]);g.strokeRect(c0.x0+.5,y0+.5,c1.x1-c0.x0-1,y1-y0-1);g.restore()}}
   
   g.globalAlpha=1}};
-function spanX(G,sp){const a=Math.max(sp.s,G.a),b=Math.min(sp.e,G.b);if(b<=a)return null;const c0=G.col[a],c1=G.col[b-1];if(!c0||!c1)return null;sp.clipR=sp.e>G.b;return[c0.x0,c1.x1]}
+/* a span's x range in the roll ([x0, x1]), or null when it is not in the steps shown; a MIDI note's end can fall inside a step (LEN ticks) */
+function spanX(G,sp){const a=Math.max(sp.s,G.a),b=Math.min(sp.e,G.b);if(b<=a)return null;const bi=Math.ceil(b)-1,c0=G.col[a],c1=G.col[bi];if(!c0||!c1)return null;sp.clipR=sp.e>G.b||!!sp.wrap;return[c0.x0,c1.x0+(b-bi)*(c1.x1-c1.x0)]}
 let rollDrag=null;
+/* a bar's end that drags its length: 8 px, at most a third of the bar (a narrow 1/16 note keeps a body to press) */
+const endZone=(x0,x1)=>Math.min(8,(x1-x0)/3);
 function laneHit(c,e){const G=laneGeom(c),r=c.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let s=null;for(const k of G.vs){const q=G.col[k];if(q&&x>=q.x0-1.5&&x<=q.x1+1.5){s=k;break}}if(s==null)return null;
  const n=G.lo+G.rows-1-Math.floor((y-G.top)/G.rh),t=G.t;
- for(const sp of noteSpans(t)){const rr=spanX(G,sp);if(!rr)continue;for(let k=0;k<sp.n.length;k++){if(sp.n[k]!==n)continue;const c0=G.col[sp.s];const x1=k===0||isMidiT(t)?rr[1]:(c0?c0.x1:-1),x0=k===0||isMidiT(t)?rr[0]:(c0?c0.x0:-1);if(x>=x0&&x<=x1)return{s:sp.s,n,k,edge:k===0&&!sp.clipR&&x>x1-8,cell:s}}}
+ for(const sp of noteSpans(t)){const rr=spanX(G,sp);if(rr)for(let k=0;k<sp.n.length;k++){if(sp.n[k]!==n)continue;const c0=G.col[sp.s];const x1=k===0||isMidiT(t)?rr[1]:(c0?c0.x1:-1),x0=k===0||isMidiT(t)?rr[0]:(c0?c0.x0:-1);if(x>=x0&&x<=x1)return{s:sp.s,n,k,edge:k===0&&!sp.clipR&&x>x1-endZone(x0,x1),cell:s}}
+  /* the part of a gate past the pattern's end, at its start: its end sets the length */
+  const wr=sp.wrap&&sp.n[0]===n?spanX(G,{s:0,e:sp.wrap}):null;if(wr&&x>=wr[0]&&x<=wr[1]&&x>wr[1]-endZone(wr[0],wr[1]))return{s:sp.s,n,k:0,edge:true,wrap:true,cell:s}}
  return{s,n,k:-1,cell:s}}
 /* the row under the pointer (hover light) and a press on the keys: play that note on the track, as the home-row keys do */
 S.rollHov=null;
@@ -2365,48 +2427,119 @@ const rollRow=(c,G,e)=>{const r=c.getBoundingClientRect(),n=G.lo+G.rows-1-Math.f
 const onKeys=(c,G,e)=>e.clientX-c.getBoundingClientRect().left<G.firstX-1.5;
 function rollKey(t,n){rollDrag.n=n;if(n!=null)keyNote(t,n,KB.vel)}
 document.addEventListener("pointerout",e=>{const c=e.target.closest?.("canvas.roll");if(c&&!c.contains(e.relatedTarget)&&S.rollHov){S.rollHov=null;drawEd(c)}});
+/* ===== Draw or select, and note lengths (I-007, I-010; 58-roll.js has what the machine does with a length) =====
+   Draw (B, or the Draw key over the steps): a press on an empty step adds a note that lasts the draw length (the Len
+   key; a NOTE OFF where it ends, or a MIDI note's LEN), a drag sideways paints. Off (select): a drag in an empty place
+   boxes notes (the selection both editors share, StepSel: the steps from the first note's trig to the last one's end,
+   its NOTE OFF too), a press on a note selects it, a drag of the selection moves it (⌘-drag: a copy, 77-select.js),
+   a double-click adds a note. Both: a note's end drags its length (the draw length follows), up or down its pitch,
+   alt-click deletes it (the note before it keeps its length). Prefs per viewer (localStorage); draw by default. */
+S.rollDraw=true;S.rollLen=1;S.rollBox=null;
+(()=>{let v=null;try{v=JSON.parse(localStorage.getItem("mmeditor.roll")||"null")}catch(_){}if(v&&typeof v==="object"){S.rollDraw=v.draw!==false;if(v.len>=1&&v.len<=64)S.rollLen=Math.round(v.len)}})();
+function rollPrefs(){try{localStorage.setItem("mmeditor.roll",JSON.stringify({draw:S.rollDraw,len:S.rollLen}))}catch(_){}}
+function rollKeysHtml(){return`<span class="rollkeys"><button class="ptog ${S.rollDraw?"on":""}" id="rolldraw" aria-pressed="${S.rollDraw}" title="Draw notes in the piano roll (B). Off: drag a box round notes to select them, drag them to move"><i class="led"></i>Draw</button><button class="pgkey rolllen" id="rolllen" title="The length a new note gets: click for the next, shift-click the one before (dragging a note's end sets it too)">${MmRoll.say(S.rollLen)}</button></span>`}
+function syncRollKeys(){const d=$("#rolldraw"),l=$("#rolllen");if(d){d.classList.toggle("on",S.rollDraw);d.setAttribute("aria-pressed",S.rollDraw)}if(l)l.textContent=MmRoll.say(S.rollLen);const c=$("#seq canvas.roll[data-big]");if(c){const tp=ROLL_TIP(+c.dataset.t);c.title=tp;c.setAttribute("aria-label",tp)}}
+function setRollDraw(on){S.rollDraw=!!on;S.rollBox=null;rollPrefs();syncRollKeys();redraw();toast(S.rollDraw?`Draw: a click adds a note of ${MmRoll.say(S.rollLen)} (B: select).`:"Select: drag a box round notes, drag them to move, double-click adds a note (B: draw).")}
+function setRollLen(L,say){L=clamp(Math.round(L),1,64);if(L!==S.rollLen){S.rollLen=L;rollPrefs();syncRollKeys()}if(say)toast(`New notes: ${MmRoll.say(L)}.`)}
+/* the Len key: the next (shift: the one before) of 1/16 1/8 1/4 1/2 1 bar, from where it is */
+function stepRollLen(back){const Ls=MmRoll.LENGTHS,n=back?[...Ls].reverse().find(x=>x<S.rollLen)??Ls[Ls.length-1]:Ls.find(x=>x>S.rollLen)??Ls[0];setRollLen(n,true)}
+Keys.bind({id:"roll-draw",short:"Draw",scope:"seq",keys:["B"],group:"Sequence",does:"Piano roll: draw notes on / off (off: drag a box round notes to select them, drag them to move, double-click adds one). B taps the tempo on the other workspaces",when:()=>seqKeys()&&kbOn(),run:()=>setRollDraw(!S.rollDraw)});
+Keys.bind({id:"roll-box",scope:"seq",area:"Roll",keys:["drag in an empty place"],group:"Sequence",does:"Select (Draw off): box notes; the selection takes them from the first trig to the last one's end. Drag the selection: move it"});
+Keys.bind({id:"roll-length",scope:"seq",area:"Roll",keys:["drag a note's end"],group:"Sequence",does:"The note's length (a NOTE OFF where it ends; a MIDI note's LEN, 6 a step); new notes get it too. Up to the track's next trig, past the pattern's end onto its start"});
+const midiOf=t=>isMidiT(t)?{kitLen:trk(t).v.MID[0]}:null;
+/* changes ([step, value]) into the view; the steps changed */
+function rollPut(t,changes){const tr=trk(t);for(const[k,v] of changes){tr.steps[k]=v;if(!v||v.off){tr.slide.delete(k);clearStepLocks(t,k)}}return changes.map(([k])=>k)}
+/* the note on s lasts L steps (MmRoll.setLen): its NOTE OFFs and, on a MIDI track, its LEN lock. The steps changed,
+   whether a lock did, the length it got (at most to the next trig) and the NOTE OFF it put down (-1: none) */
+function rollLen(t,s,L){const r=MmRoll.setLen(trk(t).steps,S.len,s,L,midiOf(t)),off=(r.steps.find(([,v])=>v&&v.off)||[-1])[0],touched=rollPut(t,r.steps);let lock=false;
+ if(isMidiT(t)){const key=lkKey(t,"MID.0"),m=S.locks.get(key),had=m?.get(s);if(r.len==null){if(had!=null){m.delete(s);if(!m.size)S.locks.delete(key);lock=true}}else if(had!==r.len&&setLock(t,"MID.0",s,r.len))lock=true}
+ return{touched,lock,L:r.L,off}}
+/* a note removed as a person means it: the note before it keeps its length (MmRoll.remove) */
+function rollRemove(t,s){return rollPut(t,MmRoll.remove(trk(t).steps,S.len,s,isMidiT(t)?k=>midiLenOf(t,k):null))}
+/* a new note on step s at pitch n that lasts the draw length */
+function rollAdd(t,s,n){trk(t).steps[s]=note(n);const r=rollLen(t,s,S.rollLen);return{touched:new Set([s,...r.touched]),lock:r.lock,off:r.off}}
 function rollDown(c,e){if(e.button!==0)return;const t=+c.dataset.t;if(t!==S.sel){select(t);return}
  {const G=laneGeom(c);if(e.button===0&&onKeys(c,G,e)){const n=rollRow(c,G,e);if(n==null)return;if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}rollDrag={mode:"key",t,c};rollKey(t,n);drawEd(c);return}}
  const h=laneHit(c,e);if(!h)return;const tr=trk(t);
  if(e.metaKey||e.ctrlKey)return;	/* ⌘ selects (77-select.js), Ctrl on a Mac is the step menu's; the fill is in the step menu (K7) */
- if(h.k>=0&&e.altKey){const st=tr.steps[h.s];if(h.k>0||(st.n&&st.n.length>1))st.n.splice(h.k,1);else{tr.steps[h.s]=null;clearStepLocks(t,h.s)}rollDrag={mode:"erase",s:h.s,c,last:h.s,touched:new Set([h.s])};redraw();return}
+ if(h.k>=0&&e.altKey){const st=tr.steps[h.s];let touched;if(h.k>0||(st.n&&st.n.length>1)){st.n.splice(h.k,1);touched=[h.s]}else touched=rollRemove(t,h.s);rollDrag={mode:"erase",s:h.s,c,last:h.s,touched:new Set(touched)};redraw();return}
  if(h.k<0&&e.altKey){const st=tr.steps[h.cell];if(!st||st.off){tr.steps[h.cell]=st?.off?null:{off:1};editStep(t,h.cell);rerenderSeq()}return}
- if(h.k>=0&&h.edge){rollDrag={mode:"len",s:h.s,c,touched:new Set()};return}
+ if(h.k>=0&&h.edge){rollDrag={mode:"len",s:h.s,c,wrap:!!h.wrap,touched:new Set([h.s]),lock:false,L:null};return}
+ if(!S.rollDraw){rollSelectDown(c,e,h);return}
  if(h.k>=0){rollDrag={mode:"pitch",s:h.s,k:h.k,c};return}
  const st=tr.steps[h.cell];
- if(!st||st.off){tr.steps[h.cell]=note(h.n);rollDrag={mode:"pitch",s:h.cell,k:0,c,moved:true,paint:true}}
+ if(!st||st.off){const a=rollAdd(t,h.cell,h.n);rollDrag={mode:"pitch",s:h.cell,k:0,c,moved:true,paint:true,touched:a.touched,lock:a.lock,paintOff:a.off}}
  else if(e.shiftKey){if(!st.n)st.n=[h.n];else if(!st.n.includes(h.n))st.n.push(h.n);rollDrag={mode:"pitch",s:h.cell,k:st.n.length-1,c,moved:true}}
  else{if(!st.n)st.n=[h.n];else st.n[0]=h.n;rollDrag={mode:"pitch",s:h.cell,k:0,c,moved:true}}
  redraw()}
+/* select mode: a press in an empty place starts a box (a double-click adds a note); on a note it selects the note (shift:
+   the selection grows to it), and what the drag does next decides: across the steps it moves the selection, up or
+   down the note's pitch */
+function rollSelectDown(c,e,h){const t=S.sel,tr=trk(t);
+ if(h.k<0){rollDrag={mode:"box",c,t,a:{s:h.cell,n:h.n},moved:false};S.rollBox={t,s0:h.cell,s1:h.cell,n0:h.n,n1:h.n};redraw();return}
+ const sp=MmRoll.span(tr.steps,S.len,h.s,isMidiT(t)?{len:midiLenOf(t,h.s)}:null),x=S.stepSel;
+ if(e.shiftKey&&x&&x.n===1&&x.t===t){setSel({t,n:1,from:Math.min(x.from,sp.from),to:Math.max(x.to,sp.to)});return}
+ const inside=inSel(t,h.s);if(!inside)setSel({t,n:1,from:sp.from,to:sp.to});
+ rollDrag={mode:"note",c,s:h.s,k:h.k,cell0:h.cell,n0:h.n,moved:false}}
+/* select mode: a double-click in an empty place adds a note (the draw length), as a DAW's piano roll does */
+document.addEventListener("dblclick",e=>{const c=e.target.closest?.("#seq canvas.roll[data-big]");if(!c||S.rollDraw||S.rec||+c.dataset.t!==S.sel)return;const h=laneHit(c,e);if(!h||h.k>=0||onKeys(c,laneGeom(c),e))return;
+ const t=S.sel,a=rollAdd(t,h.cell,h.n);editSpan(t,a.touched,a.lock);renderTop();rerenderSeq();toast(`Added ${noteName(h.n)} on step ${h.cell+1}, ${MmRoll.say(Math.min(S.rollLen,MmRoll.room(trk(t).steps,S.len,h.cell)))}.`)});
+/* the box's notes: every note with a pitch in its rows and a gate in its steps (the part at the pattern's start too) */
+function rollBoxed(t,b){const out=[];for(const sp of noteSpans(t)){if(!sp.n.some(n=>n>=b.n0&&n<=b.n1))continue;if(sp.s<=b.s1&&sp.e-1>=b.s0||sp.wrap&&b.s0<sp.wrap)out.push(sp.s)}return out}
+function rollBoxEnd(d){const b=S.rollBox,t=S.sel;S.rollBox=null;if(!b){redraw();return}
+ if(!d.moved){clearSel();redraw();return}
+ const ss=rollBoxed(t,b),tr=trk(t);
+ if(!ss.length){setSel({t,n:1,from:b.s0,to:b.s1+1});toast(Modifiers.say(`No note in the box: selected ${selSay(S.stepSel)}.`));return}
+ const spans=ss.map(s=>MmRoll.span(tr.steps,S.len,s,isMidiT(t)?{len:midiLenOf(t,s)}:null));
+ setSel({t,n:1,from:Math.min(...spans.map(x=>x.from)),to:Math.max(...spans.map(x=>x.to))});
+ toast(Modifiers.say(`Selected ${ss.length} note${ss.length>1?"s":""}, ${selSay(S.stepSel)} · drag to move · ⌘C copy · ⌘X cut · ⌘D duplicate · Delete`))}
+/* the length a drag of a note's end makes, in steps from its trig: the column the pointer is past the middle of; on
+   the part of a gate at the pattern's start, a step there is a step past the end; past the last column shown, a
+   column's width a step more */
+function rollLenAt(G,d,x){let e2=null;for(const k of G.vs){const q=G.col[k];if(q&&x>(q.x0+q.x1)/2)e2=k+1}if(e2==null)e2=G.a;
+ if(d.wrap)e2+=S.len;else if(x>G.lastX){const q=G.col[G.b-1],cw=q?Math.max(4,q.x1-q.x0):16;e2=G.b+Math.floor((x-G.lastX)/cw)}
+ return Math.max(1,e2-d.s)}
 function rollMove(c,e){const t=+c.dataset.t;if(!rollDrag){if(t!==S.sel){c.style.cursor="pointer";return}const G=laneGeom(c),n=rollRow(c,G,e),key=onKeys(c,G,e);
   if((S.rollHov?.n??null)!==n||S.rollHov?.t!==t){S.rollHov=n==null?null:{t,n};drawEd(c)}
-  if(key){c.style.cursor=n==null?"default":"pointer";return}const h=laneHit(c,e);c.style.cursor=h?.edge?"ew-resize":h?.k>=0?"ns-resize":"crosshair";return}
+  if(key){c.style.cursor=n==null?"default":"pointer";return}const h=laneHit(c,e);c.style.cursor=h?.edge?"ew-resize":h?.k>=0?(S.rollDraw?"ns-resize":"move"):(S.rollDraw?"crosshair":"default");return}
  if(rollDrag.mode==="key"){const d=rollDrag,n=rollRow(d.c,laneGeom(d.c),e);if(n!==d.n){if(d.n!=null)keyNote(d.t,d.n,0);rollKey(d.t,n);S.rollHov=n==null?null:{t:d.t,n};drawEd(d.c)}return}
- c=rollDrag.c;if(rollPaintMove(c,e))return;const r=c.getBoundingClientRect(),G=laneGeom(c),tr=trk(S.sel),st=tr.steps[rollDrag.s];if(!st)return;
- if(rollDrag.mode==="pitch"){const n=clamp(G.lo+G.rows-1-Math.floor((e.clientY-r.top-G.top)/G.rh),0,127);if(st.n&&st.n[rollDrag.k]!==n){st.n[rollDrag.k]=n;rollDrag.moved=true;redraw()}}
- else{const x=e.clientX-r.left;let e2=rollDrag.s+1;for(const k of G.vs){if(k<=rollDrag.s)continue;const q=G.col[k];if(q&&x>(q.x0+q.x1)/2)e2=k+1}if(x>G.lastX)e2=G.b;e2=clamp(e2,rollDrag.s+1,S.len);if(e2===rollDrag.e)return;rollDrag.e=e2;rollDrag.moved=true;
-  if(isMidiT(S.sel))setLock(S.sel,"MID.0",rollDrag.s,clamp((e2-rollDrag.s)*8,1,126));
-  else{for(let k=rollDrag.s+1;k<S.len;k++){if(tr.steps[k]&&!tr.steps[k].off)break;if(tr.steps[k]?.off){tr.steps[k]=null;rollDrag.touched.add(k)}}if(e2<S.len&&!tr.steps[e2]){tr.steps[e2]={off:1};rollDrag.touched.add(e2)}}
-  redraw()}}
+ c=rollDrag.c;const d=rollDrag,G=laneGeom(c),r=c.getBoundingClientRect();
+ if(d.mode==="box"){const h=laneHit(c,e),n=clamp(G.lo+G.rows-1-Math.floor((e.clientY-r.top-G.top)/G.rh),G.lo,G.hi),s=h?h.cell:e.clientX-r.left>G.lastX?G.b-1:G.a;
+  const b={t:d.t,s0:Math.min(d.a.s,s),s1:Math.max(d.a.s,s),n0:Math.min(d.a.n,n),n1:Math.max(d.a.n,n)};if(JSON.stringify(b)!==JSON.stringify(S.rollBox)){S.rollBox=b;d.moved=true;redraw()}return}
+ if(d.mode==="note"||d.mode==="move"){const h=laneHit(c,e),cell=h?h.cell:d.cell0,n=clamp(G.lo+G.rows-1-Math.floor((e.clientY-r.top-G.top)/G.rh),0,127);
+  if(d.mode==="note"){if(cell!==d.cell0){d.mode="move"}else if(n!==d.n0&&d.k>=0){Object.assign(d,{mode:"pitch"});rollMove(c,e);return}else return}
+  const x=S.stepSel;if(!x)return;const ghost=StepSel.dropAt(x,{from:{t:x.t,s:d.cell0},at:{t:x.t,s:cell}},S.len,SEL_TRACKS);d.ghost=ghost.from!==x.from?ghost:null;syncSel(d.ghost);return}
+ if(rollPaintMove(c,e))return;const tr=trk(S.sel),st=tr.steps[d.s];if(!st)return;
+ if(d.mode==="pitch"){const n=clamp(G.lo+G.rows-1-Math.floor((e.clientY-r.top-G.top)/G.rh),0,127);if(st.n&&st.n[d.k]!==n){st.n[d.k]=n;d.moved=true;redraw()}}
+ else if(d.mode==="len"){const L=rollLenAt(G,d,e.clientX-r.left);if(L===d.want)return;d.want=L;const q=rollLen(S.sel,d.s,L);q.touched.forEach(k=>d.touched.add(k));d.lock=d.lock||q.lock;d.L=q.L;d.moved=true;redraw()}}
 /* Paint (the Machinedrum Editor's drag across steps, MM-PORT-PLAN.md 2026-10-05): a new note dragged sideways out of its
-   column paints a note at its pitch on every empty step the pointer crosses; Alt-press on a note deletes it, and the
-   drag goes on erasing every step it crosses (its notes, slide and locks). The steps: mmPaint (52-gen.js). Nothing
-   is sent before the release (an intent shows the view again, which would draw the roll anew under the pointer):
-   then one steps intent (editSpan), one undo step. The columns between two moves count too. */
+   column paints a note at its pitch on every empty step the pointer crosses, the last one lasting the draw length
+   (the NOTE OFF the drag put down moves with it); Alt-press on a note deletes it, and the drag goes on deleting every
+   note it crosses (its slide and locks; the note before keeps its length). The steps: mmPaint (52-gen.js) and
+   MmRoll. Nothing is sent before the release (an intent shows the view again, which would draw the roll anew under
+   the pointer): then one steps intent (editSpan), one undo step. The columns between two moves count too. */
 function rollPaintMove(c,e){const d=rollDrag;if(d.mode==="pitch"&&!d.paint)return false;if(d.mode!=="pitch"&&d.mode!=="paint"&&d.mode!=="erase")return false;
  const s=laneHit(c,e)?.cell;if(s==null||s===d.last||s>=S.len)return d.mode!=="pitch";
- const t=S.sel,tr=trk(t);if(d.mode==="pitch"){const st=tr.steps[d.s];if(!st?.n)return false;Object.assign(d,{mode:"paint",n:st.n[0],last:d.s,touched:new Set([d.s])})}
- for(const[k,x] of mmPaint(tr.steps,d.last,s,d.mode,d.n)){tr.steps[k]=x;if(!x){tr.slide.delete(k);clearStepLocks(t,k)}d.touched.add(k)}
+ const t=S.sel,tr=trk(t);if(d.mode==="pitch"){const st=tr.steps[d.s];if(!st?.n)return false;Object.assign(d,{mode:"paint",n:st.n[0],last:d.s,painted:new Set([d.s])})}
+ if(d.mode==="erase"){const a=Math.min(d.last,s),b=Math.max(d.last,s);for(let k=a;k<=b;k++)if(tr.steps[k]&&!tr.steps[k].off)rollRemove(t,k).forEach(x=>d.touched.add(x))}
+ else{if(d.paintOff>=0&&tr.steps[d.paintOff]?.off){tr.steps[d.paintOff]=null;d.touched.add(d.paintOff)}
+  for(const[k,x] of mmPaint(tr.steps,d.last,s,"paint",d.n)){tr.steps[k]=x;d.touched.add(k);d.painted.add(k)}
+  const q=rollLen(t,Math.max(...d.painted),S.rollLen);q.touched.forEach(k=>d.touched.add(k));d.lock=d.lock||q.lock;d.paintOff=q.off}
  d.last=s;redraw();return true}
 /* the steps a drag changed, as one steps intent over their span (one per step would not do: each intent shows the
-   view again from the documents and its own writes, so the later steps' changes were gone before they were sent) */
-function editSpan(t,touched){const ss=[...touched];if(!ss.length)return;const a=Math.min(...ss),b=Math.max(...ss)+1;edit("steps",{from:a,to:b,rows:[rangeRow(t,a,b)]})}
-/* the drag's edit, when it ends: the dragged step's notes, or its length (a MIDI track's LEN lock; a synth track's
-   NOTE OFFs, each step it moved), or the steps a paint or an erase touched */
+   view again from the documents and its own writes, so the later steps' changes were gone before they were sent);
+   locks: the span's locks too (a MIDI note's LEN, the locks of the steps a note left) */
+function editSpan(t,touched,locks){const ss=[...touched];if(!ss.length)return;const a=Math.min(...ss),b=Math.max(...ss)+1;edit("steps",{from:a,to:b,rows:[rangeRow(t,a,b,locks)]})}
+/* the drag's edit, when it ends: the dragged step's notes, or its length (a synth track's NOTE OFFs, a MIDI track's
+   LEN lock), or the steps a paint or an erase touched, or the box's selection, or the selection moved */
 function rollUp(){const d=rollDrag;rollDrag=null;if(d?.mode==="key"){if(d.n!=null)keyNote(d.t,d.n,0);drawEd(d.c);return}const t=S.sel;
- if(d?.mode==="paint"||d?.mode==="erase"){editSpan(t,d.touched);const n=d.touched.size;if(n>1)toast(`${d.mode==="paint"?"Painted":"Erased"} ${n} steps of ${tLabel(t)}${d.mode==="paint"?" with "+noteName(d.n):""} (one undo step).`);renderTop();rerenderSeq();return}
+ if(d?.mode==="box"){rollBoxEnd(d);return}
+ if(d?.mode==="note"){toast(Modifiers.say(`Selected ${selSay(S.stepSel)} · drag to move · ⌘C copy · ⌘X cut · ⌘D duplicate · Delete`));return}
+ if(d?.mode==="move"){syncSel();if(d.ghost)selMoveTo(d.ghost.from);return}
+ if(d?.mode==="paint"||d?.mode==="erase"){editSpan(t,d.touched,true);const n=d.mode==="paint"?d.painted.size:d.touched.size;if(n>1)toast(`${d.mode==="paint"?"Painted":"Erased"} ${n} ${d.mode==="paint"?"notes":"steps"} of ${tLabel(t)}${d.mode==="paint"?" with "+noteName(d.n):""} (one undo step).`);renderTop();rerenderSeq();return}
  if(!d?.moved)return;
- if(d.mode!=="len")editStep(t,d.s);else if(isMidiT(t)){const v=S.locks.get(lkKey(t,"MID.0"))?.get(d.s);if(v!=null)edit("lock",{t,page:7,i:0,s:d.s,v})}else editSpan(t,d.touched);
+ if(d.mode==="len"){editSpan(t,d.touched,d.lock);if(d.L){setRollLen(d.L);toast(`${tLabel(t)} step ${d.s+1}: ${MmRoll.say(d.L)}${d.L<d.want?" (the next trig ends it)":""}; new notes get it too.`)}rerenderSeq();return}
+ if(d.touched)editSpan(t,d.touched,d.lock);else editStep(t,d.s);
  rerenderSeq()}
 
 /* ---- 75-comforts.js ---- */
@@ -2544,7 +2677,7 @@ Keys.bind({id:"mute-track",scope:"any",keys:["M"],code:"KeyM",group:"Selected tr
 Keys.bind({id:"mute-all",scope:"any",keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
 Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
  when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{if(selKeys()){selMove(e.key==="ArrowDown"?1:-1,0);return}const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
-Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here)",when:kbOn,run:()=>tapTempo()});
+Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here). On Sequence B is the piano roll's Draw",when:()=>kbOn()&&S.ws!=="seq",run:()=>tapTempo()});
 Keys.bind({id:"rotate",scope:"seq",keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
 Keys.bind({id:"unmute-all",scope:"any",keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
 Keys.bind({id:"unmark-paste",scope:"seq",keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});
@@ -2675,7 +2808,7 @@ function genStripHtml(){const t=S.sel,tr=trk(t),sp=genSpec(t),all=S.alt,[from,to
 /* the step gestures behind a small ? key (a click: the list of keys) */
 function stepLegend(){const midi=isMidiT(S.sel),row=(cls,what,how)=>`<span>${cls!=null?`<i class="lg on ${cls}"></i>`:`<i class="lg none"></i>`}<b>${what}</b>${how}</span>`;
  return`<span class="steplegend"><button class="glegkey" id="steplegend" aria-label="Step gestures" aria-describedby="steplegpop">?</button><span class="legend glegpop" id="steplegpop" role="tooltip">${row("","Note","click in the roll; drag up or down for pitch, sideways to paint (alt: erase)")}${midi?"":row("g","Trigless","no envelope trigs (the ENV row)")}${row("y","Note off","alt-click an empty step")}${row("lk","Has locks","a lock on the step")}${row(null,"Fill","⌘-click: every 2nd step from there to the end gets the note (from a note: off); ⌘⇧-click: every 4th")}<small>? the list of keys</small></span></span>`}
-function genBarHtml(){return`<div class="genbar"><div class="genband" id="genband">${genStripHtml()}</div><span class="gdiv" aria-hidden="true"></span>${stepLegend()}${pageKeys()}</div>`}
+function genBarHtml(){return`<div class="genbar"><div class="genband" id="genband">${genStripHtml()}</div><span class="gdiv" aria-hidden="true"></span>${stepLegend()}${rollKeysHtml()}${pageKeys()}</div>`}
 /* a rail tag's tooltip: the spec and its notes */
 function genTip(t){const sp=genSpec(t),n=isMidiT(t)?"":mmNotesTag(sp,noteName);return`${genTag(sp)}${n?" · "+n:""}: ${tLabel(t)}'s generator (the GEN bar)`}
 /* the bar again (and the rail's spec tags), without a full render */
@@ -2799,7 +2932,7 @@ const clipSize=()=>CLIP&&CLIP.rows?{tracks:CLIP.rows.length,length:CLIP.length}:
 /* ---- the operations (⌘C ⌘X ⌘V ⌘D Delete Enter, the drop, the step menu): each one undo step; the result's note says what was done ---- */
 const selArgs=x=>({t:x.t,n:x.n,from:x.from,to:x.to});
 function selCopy(){const x=selShown();if(!x)return false;CLIP=clipOf(x);edit("copySteps",selArgs(x));toast(`Copied ${selSay(x)}.`);return true}
-function selCut(){const x=selShown();if(!x)return false;CLIP=clipOf(x);edit("copySteps",selArgs(x));edit("clearSteps",selArgs(x));toast(`Cut ${selSay(x)}.`);return true}
+function selCut(){const x=selShown();if(!x)return false;CLIP=clipOf(x);const keep=selKeeps(x);edit("copySteps",selArgs(x));edit("clearSteps",selArgs(x));selKeep(keep);toast(`Cut ${selSay(x)}.`);return true}
 /* ⌘V at the selection: the copied block's first step on its first step and track */
 function selPaste(){const x=S.stepSel;if(!x)return false;const size=clipSize();
  if(!size){toast(Modifiers.say("Copy some steps first: ⌘-click or ⌘-drag steps, then ⌘C."));return true}
@@ -2812,7 +2945,22 @@ function selCopyTo(dt,at){const x=selShown();if(!x)return false;
  if(at>=S.len){toast(`No room: the pattern is ${S.len} steps.`);return true}
  edit("copyStepsTo",Object.assign(selArgs(x),{at,dt}));setSel(StepSel.landing({tracks:x.n,length:x.to-x.from},dt,at,SEL_TRACKS,S.len));return true}
 function selDuplicate(){const x=selShown();return x?selCopyTo(x.t,x.to):false}
-function selClear(){const x=selShown();if(!x)return false;edit("clearSteps",selArgs(x));return true}
+function selClear(){const x=selShown();if(!x)return false;const keep=selKeeps(x);edit("clearSteps",selArgs(x));selKeep(keep);return true}
+/* I-010: a note before the selection that ran into it keeps its length when the selection is cleared: a NOTE OFF on
+   the selection's first step with anything on it (where that note ended; on a MIDI track only when its LEN went that
+   far). Read before the clear, put down after it (a step intent of its own, in the same gesture: one undo step). */
+function selKeeps(x){const out=[];for(let t=x.t;t<x.t+x.n;t++){const tr=trk(t);let e=-1;for(let s=x.from;s<x.to;s++)if(tr.steps[s]){e=s;break}if(e<0)continue;
+  const p=MmRoll.before(tr.steps,S.len,x.from);if(p==null||p>=x.from&&p<x.to)continue;
+  if(isMidiT(t)){const v=midiLenOf(t,p);if(v<MmRoll.LEN_HOLD&&v/MmRoll.TICKS<=((e-p)%S.len+S.len)%S.len)continue}out.push([t,e])}return out}
+function selKeep(keep){for(const[t,e] of keep){trk(t).steps[e]={off:1};edit("step",{t,s:e,v:{off:true}})}}
+/* the selection moved (a drag of it with Draw off): copied to step `at` of its tracks, then the steps it left cleared
+   (the note before it keeps its length, as on a clear); one undo step (the intents of one gesture) */
+function selMoveTo(at){const x=selShown();if(!x)return false;const n=x.to-x.from;if(at===x.from)return true;
+ if(at>=S.len){toast(`No room: the pattern is ${S.len} steps.`);return true}
+ const keep=selKeeps(x);edit("copyStepsTo",Object.assign(selArgs(x),{at,dt:x.t}));
+ const a=at>x.from?x.from:Math.max(x.from,at+n),b=at>x.from?Math.min(x.to,at):x.to;
+ if(b>a){edit("clearSteps",{t:x.t,n:x.n,from:a,to:b});selKeep(keep.filter(([,e])=>e>=a&&e<b))}
+ setSel(StepSel.landing({tracks:x.n,length:n},x.t,at,SEL_TRACKS,S.len));toast(`Moved ${selSay(x)} to step ${at+1} (⌘Z undoes it).`);return true}
 /* the selection's steps of each track as one steps intent (rows), after f changed the view's steps */
 function selSteps(x,f){const rows=[];for(let t=x.t;t<x.t+x.n;t++){f(t,trk(t));rows.push(rangeRow(t,x.from,x.to))}edit("steps",{from:x.from,to:x.to,rows});renderTop();rerenderSeq()}
 /* Enter, the step menu's Trig: a note on every empty selected step (the track's last pitch), or, when none is empty,
@@ -2846,7 +2994,8 @@ document.addEventListener("pointerdown",e=>{if(e.button!==0||S.ws!=="seq")return
  if(!c){if(!inSeq&&e.target.closest?.("#main"))clearSel();return}
  const d=StepSel.start({cmd:Modifiers.cmd(e),shift:e.shiftKey,alt:e.altKey,ctrl:e.ctrlKey},{t:c.t,s:c.s},!!c.ruler,S.stepSel,S.sel);
  /* a press that edits (a note, a chord note, an erase, a trig row's paint) ends the selection; Ctrl on a Mac is the step menu's */
- if(!d){if(!e.metaKey&&!e.ctrlKey)clearSel();return}
+ /* in the roll with Draw off a plain press selects, moves or boxes (70-seq.js) */
+ if(!d){if(!e.metaKey&&!e.ctrlKey&&!(c.pitch!=null&&!S.rollDraw))clearSel();return}
  if(S.rec){toast("Wait until live recording stops.");return}
  selDrag=d;e.preventDefault();e.stopPropagation()},true);
 document.addEventListener("pointermove",e=>{const d=selDrag;if(!d)return;if(e.buttons===0&&e.pointerType==="mouse"){endSelect();return}
@@ -2903,13 +3052,15 @@ const ARPHELP={0:"<b>OFF</b> The track plays the base note of each trig. Chord n
  1:"<b>KEY</b> Runs while notes are held and plays only held notes. Release all and it stops.",
  2:"<b>SID</b> Needs two or more notes. They stay in the cycle after release until a new chord.",
  3:"<b>ADD</b> Starts on the first note. Each extra key joins while one key is held."};
-function midiLenSteps(t,s){const v=S.locks.get(lkKey(t,"MID.0"))?.get(s)??trk(t).v.MID[0];return v>=127?Infinity:Math.max(.25,v/8)}
-/* a gate runs from a note trig to its NOTE OFF or the next trig (synth tracks), or for LEN (MIDI) */
-function noteSpans(t){const tr=trk(t),out=[],L=S.len;
- for(let s=0;s<L;s++){const st=tr.steps[s];if(!st||st.off)continue;let e=s+1;
-  if(isMidiT(t)){const d=midiLenSteps(t,s);if(d===Infinity){e=L;for(let k=s+1;k<L;k++)if(tr.steps[k]?.off){e=k;break}}else e=Math.min(L,s+d)}
-  else{while(e<L&&!tr.steps[e])e++}
-  out.push({s,e,n:st.n?st.n:[lastNote(t,s)],st,kind:stepKind(st),pitchless:!st.n,endOff:!!tr.steps[e]?.off})}return out}
+/* a MIDI track's LEN on step s (its lock, or the kit's MIDI page): ticks, 6 a step (measured, MmRoll) */
+const midiLenOf=(t,s)=>S.locks.get(lkKey(t,"MID.0"))?.get(s)??trk(t).v.MID[0];
+function midiLenSteps(t,s){const v=midiLenOf(t,s);return v>=MmRoll.LEN_HOLD?Infinity:Math.max(1,v)/MmRoll.TICKS}
+/* a gate runs from a note trig to its NOTE OFF or the track's next trig, round the pattern's end (synth tracks), or for
+   LEN, cut there too (MIDI): MmRoll.end, as the firmware plays it (I-010). e is where it ends in the pattern (at most
+   the length), wrap the steps it goes on sounding from the pattern's start */
+function noteSpans(t){const tr=trk(t),out=[],L=S.len,midi=isMidiT(t);
+ for(let s=0;s<L;s++){const st=tr.steps[s];if(!st||st.off)continue;const end=MmRoll.end(tr.steps,L,s,midi?{len:midiLenOf(t,s)}:null),e=Math.min(L,end);
+  out.push({s,e,wrap:Math.max(0,Math.min(end-L,s)),n:st.n?st.n:[lastNote(t,s)],st,kind:stepKind(st),pitchless:!st.n,endOff:!!tr.steps[Math.floor(end)%L]?.off})}return out}
 /* B-049: the AMP envelope in steps after the trig, as the firmware plays it (MmConvert.ampEnv: the catalogue's
    measured times). ATK (to 90 %), DEC and REL (to -20 dB, an exponential fall) are times, not the tempo's: each 8
    more about doubles them (ATK 64 ≈ 0.14 s, DEC 64 ≈ 0.55 s). HOLD counts sixteenths of the tempo (HOLD 8 = one).
@@ -4456,6 +4607,8 @@ document.addEventListener("click",e=>{
  const pgk=e.target.closest("#pgkey");if(pgk&&!pgk.disabled){const n=pages16();S.viewAll=false;S.page=(S.page+(e.shiftKey?-1:1)+n)%n;render();return}
  if(e.target.closest("#pgall")){S.viewAll=!S.viewAll;render();return}
  if(e.target.closest("#pgfollow")){S.follow=!S.follow;render();return}
+ if(e.target.closest("#rolldraw")){setRollDraw(!S.rollDraw);return}
+ if(e.target.closest("#rolllen")){stepRollLen(e.shiftKey);return}
  if(S.ws==="song"){
   const bk=e.target.closest("[data-bank]");if(bk){S.bank=+bk.dataset.bank;render();return}
   const cp=e.target.closest("[data-chainpad]");if(cp){chainPad(+cp.dataset.chainpad);return}
@@ -4529,8 +4682,8 @@ Keys.bind({id:"control-all",scope:"sound mix",area:"Values",keys:["drag a value"
 Keys.bind({id:"mkey-prepare",scope:"any",area:"Tracks",keys:["M key"],mod:"shift",group:"Anywhere",does:"Click: prepare that track's mute (+ / X); applied when ⇧ is let go"});
 Keys.bind({id:"ms-paint",scope:"any",area:"Tracks",keys:["drag M / S keys"],group:"Anywhere",does:"Mute (solo) or unmute every track the drag crosses, as the first key became"});
 Keys.bind({id:"roll-chord",scope:"seq",area:"Roll",keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});
-Keys.bind({id:"roll-paint",scope:"seq",area:"Roll",keys:["roll"],group:"Sequence",does:"Click an empty step: a note there; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (one undo step)"});
-Keys.bind({id:"roll-erase",scope:"seq",area:"Roll",keys:["roll"],mod:"alt",group:"Sequence",does:"Click: delete a note (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step"});
+Keys.bind({id:"roll-paint",scope:"seq",area:"Roll",keys:["roll"],group:"Sequence",does:"Draw on (B): click an empty step: a note there, as long as the Len key says; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (the last one as long as the Len key says; one undo step). Draw off: double-click"});
+Keys.bind({id:"roll-erase",scope:"seq",area:"Roll",keys:["roll"],mod:"alt",group:"Sequence",does:"Click: delete a note, the note before it keeps its length (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step"});
 Keys.bind({id:"lane-erase",scope:"seq",area:"Lock lane",keys:["lock lane"],mod:"alt",group:"Sequence",does:"Drag: erase locks"});
 Keys.bind({id:"lane-clear-all",scope:"seq",area:"Lock lane",keys:["lock lane clear"],mod:"alt",group:"Sequence",does:"Click: clear every lock of the track (all its parameters)"});
 

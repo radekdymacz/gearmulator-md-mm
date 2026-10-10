@@ -5,13 +5,15 @@ const ARPHELP={0:"<b>OFF</b> The track plays the base note of each trig. Chord n
  1:"<b>KEY</b> Runs while notes are held and plays only held notes. Release all and it stops.",
  2:"<b>SID</b> Needs two or more notes. They stay in the cycle after release until a new chord.",
  3:"<b>ADD</b> Starts on the first note. Each extra key joins while one key is held."};
-function midiLenSteps(t,s){const v=S.locks.get(lkKey(t,"MID.0"))?.get(s)??trk(t).v.MID[0];return v>=127?Infinity:Math.max(.25,v/8)}
-/* a gate runs from a note trig to its NOTE OFF or the next trig (synth tracks), or for LEN (MIDI) */
-function noteSpans(t){const tr=trk(t),out=[],L=S.len;
- for(let s=0;s<L;s++){const st=tr.steps[s];if(!st||st.off)continue;let e=s+1;
-  if(isMidiT(t)){const d=midiLenSteps(t,s);if(d===Infinity){e=L;for(let k=s+1;k<L;k++)if(tr.steps[k]?.off){e=k;break}}else e=Math.min(L,s+d)}
-  else{while(e<L&&!tr.steps[e])e++}
-  out.push({s,e,n:st.n?st.n:[lastNote(t,s)],st,kind:stepKind(st),pitchless:!st.n,endOff:!!tr.steps[e]?.off})}return out}
+/* a MIDI track's LEN on step s (its lock, or the kit's MIDI page): ticks, 6 a step (measured, MmRoll) */
+const midiLenOf=(t,s)=>S.locks.get(lkKey(t,"MID.0"))?.get(s)??trk(t).v.MID[0];
+function midiLenSteps(t,s){const v=midiLenOf(t,s);return v>=MmRoll.LEN_HOLD?Infinity:Math.max(1,v)/MmRoll.TICKS}
+/* a gate runs from a note trig to its NOTE OFF or the track's next trig, round the pattern's end (synth tracks), or for
+   LEN, cut there too (MIDI): MmRoll.end, as the firmware plays it (I-010). e is where it ends in the pattern (at most
+   the length), wrap the steps it goes on sounding from the pattern's start */
+function noteSpans(t){const tr=trk(t),out=[],L=S.len,midi=isMidiT(t);
+ for(let s=0;s<L;s++){const st=tr.steps[s];if(!st||st.off)continue;const end=MmRoll.end(tr.steps,L,s,midi?{len:midiLenOf(t,s)}:null),e=Math.min(L,end);
+  out.push({s,e,wrap:Math.max(0,Math.min(end-L,s)),n:st.n?st.n:[lastNote(t,s)],st,kind:stepKind(st),pitchless:!st.n,endOff:!!tr.steps[Math.floor(end)%L]?.off})}return out}
 /* B-049: the AMP envelope in steps after the trig, as the firmware plays it (MmConvert.ampEnv: the catalogue's
    measured times). ATK (to 90 %), DEC and REL (to -20 dB, an exponential fall) are times, not the tempo's: each 8
    more about doubles them (ATK 64 ≈ 0.14 s, DEC 64 ≈ 0.55 s). HOLD counts sixteenths of the tempo (HOLD 8 = one).

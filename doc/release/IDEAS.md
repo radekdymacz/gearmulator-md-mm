@@ -62,7 +62,8 @@
 
 - **From:** Discord tester C, 2026-10-08: dropping notes in the MM piano roll, a note runs until the next one; wants explicit trig/note length (place 1/16, then 1/8 notes as in Ableton).
 - **More:** the notes run on until the next one and are then cut off (tester C's words); Radek on 2026-10-09 in #bugs: the Monomachine piano roll "needs to be better as well". C is used to the Digitakt's trig length and Ableton.
-- **Status:** new.
+- **Measured (2026-10-10, `mmDeskFirmwareTest notelength` and `lenprobe`):** a synth track has no length per note: a note sounds from its trig to the track's next NOTE OFF or trig, past the pattern's end onto its start. A MIDI track's note lasts LEN ticks, 24 a quarter note (6 a step at 1X; linear 1-126 at 120 and 90 BPM; the roll assumed 8 a step), cut earlier by the track's next trig or a NOTE OFF trig; LEN 127 lasts until a NOTE OFF.
+- **Status:** built for 0.5 (MM slice 3, branch `feat/mm-piano-roll`). A new note lasts the draw length (the Len key beside Draw: 1/16 1/8 1/4 1/2 1 bar; dragging a note's end sets it too, as in Ableton): a synth note writes its trig and a NOTE OFF where it ends, a MIDI note its LEN lock (or LEN 127 and a NOTE OFF past 21 steps). A note is drawn up to the track's next trig, and past the pattern's end onto its start (drawn there lighter). Deleting a note leaves the note before it its length. The firmware test stores and plays 1, 2, 4, 8 steps and 6 across the end (136, 262, 512, 1015 and 763 ms for 125-1000 ms: the measuring window adds some 13 ms) and MIDI LENs 1-126 (to the tick).
 
 ## I-009 · Option to turn off the "kit has unsaved edits" warning on pattern change
 
@@ -79,7 +80,7 @@
 
 - **From:** Discord tester C, 2026-10-08.
 - **Idea:** B toggles draw mode on the piano roll (as in Ableton); box-select notes.
-- **Status:** new; fits the keyboard-map port to the Monomachine (K7).
+- **Status:** built for 0.5 (MM slice 3, branch `feat/mm-piano-roll`). B on Sequence (and the Draw key beside PAGE) toggles draw; off, a drag in an empty place boxes notes into the selection both editors share (from the first note's trig to the last one's end, its NOTE OFF in), a press on a note selects it, a drag of the selection moves it (one undo step; ⌘-drag a copy, as before), a double-click adds a note, and the slice-2 keys and step menu act on it. B stays tap tempo on the other workspaces (tap on Sequence is gone: the roll's Draw takes the key there).
 
 ## I-005 · Update from inside the app (after 0.3.2)
 

@@ -11,6 +11,9 @@ Last run: 2026-10-05, diagnostics build of `feat/mm-port` (Release, arm64), MD O
 fix, MM-PORT-PLAN.md 2026-10-05; the run before it: 70/71, `mm-seq-roll-paint` found the rotate run holding the
 commit). Earlier, on `test/user-journeys`: Machinedrum 60 of 62 (2 skipped, window covered), Monomachine 69/69.
 
+2026-10-10, `feat/mm-piano-roll` (0.5 MM slice 3), MM OS 1.32B, in the background with fresh settings: `mm-roll-*` and
+`mm-seq-*` 24/24 after the fix noted in the roll rows (the first run 23/24).
+
 Status: **PASS**; **FAIL** with the bug (below); **SKIP** (needs the window on screen); **not covered** (reachable,
 no journey yet); **not testable** (why). "—": the editor has no such feature.
 
@@ -76,6 +79,9 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 |---|---|---|
 | Trigs / notes by click (MM: piano roll) | md-seq-first-beat PASS | mm-seq-first-beat PASS |
 | Drag-paint steps, one undo step (MM: SLIDE lane; the roll: a new note dragged sideways paints, Alt-drag erases, 2026-10-05) | md-seq-paint-undo PASS | mm-seq-slide-paint PASS, mm-seq-roll-paint PASS (paint, erase, each one undo step) |
+| Piano roll note length (I-010, 0.5 slice 3): Draw at 1/16, a note and its NOTE OFF; the Len key at 1/8, a note two steps long; a note's end dragged to the next note (its NOTE OFF goes, Len 3/16); undo | — | mm-roll-draw-length PASS (2026-10-10) |
+| Piano roll Draw off (I-007, slice 3): B, a box round a note selects it with its NOTE OFF, a drag moves both, Delete, B again, undo | — | mm-roll-box-move PASS (2026-10-10; the first run found a 1/16 note on narrow columns pressed as its end: the end zone is now at most a third of the bar) |
+| A MIDI note's length is its LEN, 6 a step (slice 3, measured): a 1/16 note is LEN 6, its end dragged to three steps locks LEN 18 | — | mm-roll-midi-len PASS (2026-10-10) |
 | Accent (Shift-click), slide (Alt-click) | md-seq-accent-slide PASS | — (MM: SLIDE lane, above) |
 | Lock lane: pick a parameter, draw locks, clear | md-seq-lock-lane PASS | mm-seq-lock-lane PASS |
 | Lock lane ramp (Shift-drag), erase (Alt-drag), wheel on a step | md-seq-lock-ramp-erase-wheel PASS | mm-seq-lock-ramp-erase-wheel PASS |
