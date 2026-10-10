@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -282,34 +283,41 @@ namespace
 		}
 	}
 
+	// An AudioBuffers holds its sixteen 16384-sample rings inline (StackAlloc): a megabyte, the whole default stack of
+	// a Windows thread (B-047). The client keeps one as a member of a heap object (DeviceConnection); so does the test.
+	std::unique_ptr<bridgeLib::AudioBuffers> newAudioBuffers()
+	{
+		return std::make_unique<bridgeLib::AudioBuffers>();
+	}
+
 	void testClientAudio()
 	{
 		OfflineConnection connection;
 		constexpr auto outputChannels = static_cast<uint32_t>(std::tuple_size_v<synthLib::TAudioOutputs>);
 		{
-			bridgeLib::AudioBuffers buffers;
+			const auto buffers = newAudioBuffers();
 			auto in = audioPayload(outputChannels + 1, 8, std::vector<uint32_t>(outputChannels + 1, 8));
-			check(throwsStdException([&] { connection.handleAudio(buffers, in); }) && buffers.getOutputSize() == 0,
+			check(throwsStdException([&] { connection.handleAudio(*buffers, in); }) && buffers->getOutputSize() == 0,
 				"client: more channels than outputs is refused");
 		}
 		{
-			bridgeLib::AudioBuffers buffers;
+			const auto buffers = newAudioBuffers();
 			constexpr uint32_t tooLarge = bridgeLib::AudioBuffers::BufferSize + 1;
 			auto in = audioPayload(1, tooLarge, {tooLarge});
-			check(throwsStdException([&] { connection.handleAudio(buffers, in); }) && buffers.getOutputSize() == 0,
+			check(throwsStdException([&] { connection.handleAudio(*buffers, in); }) && buffers->getOutputSize() == 0,
 				"client: a block larger than the ring buffers is refused");
 		}
 		{
-			bridgeLib::AudioBuffers buffers;
+			const auto buffers = newAudioBuffers();
 			auto in = audioPayload(1, 8, {16});
-			check(throwsStdException([&] { connection.handleAudio(buffers, in); }) && buffers.getOutputSize() == 0,
+			check(throwsStdException([&] { connection.handleAudio(*buffers, in); }) && buffers->getOutputSize() == 0,
 				"client: a channel larger than its block is refused");
 		}
 		{
-			bridgeLib::AudioBuffers buffers;
+			const auto buffers = newAudioBuffers();
 			auto in = audioPayload(2, 32, {32, 32});
-			connection.handleAudio(buffers, in);
-			check(buffers.getOutputSize() == 32, "client: a well-formed block is read");
+			connection.handleAudio(*buffers, in);
+			check(buffers->getOutputSize() == 32, "client: a well-formed block is read");
 		}
 	}
 
@@ -476,17 +484,27 @@ namespace
 
 int main()
 {
+	// Every line in a CI log, also when the process dies (the MSVC CRT has no line buffering; std::cout is synced
+	// with stdout)
+	std::setvbuf(stdout, nullptr, _IONBF, 0);
+
 	networkLib::setLogFunc([](const networkLib::LogLevel _level, const char*, int, const std::string& _message)
 	{
 		if(_level >= networkLib::LogLevel::Warning)
 			std::cout << "     log: " << _message << '\n';
 	});
 
+	std::cout << "testCommandSize\n";
 	testCommandSize();
+	std::cout << "testServerAudio\n";
 	testServerAudio();
+	std::cout << "testClientAudio\n";
 	testClientAudio();
+	std::cout << "testEnums\n";
 	testEnums();
+	std::cout << "testMalformedCommandOverLoopback\n";
 	testMalformedCommandOverLoopback();
+	std::cout << "testAcceptThreadSurvivesAThrowingHandler\n";
 	testAcceptThreadSurvivesAThrowingHandler();
 
 	if(g_failures)
