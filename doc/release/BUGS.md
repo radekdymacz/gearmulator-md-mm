@@ -4,6 +4,13 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-052 · mdFirstStartFirmwareTest fails now and then
+
+- **From:** the 0.5 clean-up checks, 2026-10-10: 2 of 5 full ctest runs and 1 of 10 runs alone, on a loaded Mac.
+- **What happens:** on the second start the lifecycle goes "booting" to "ready" with 1 LCD frame and no reset, so the page never sees "animating" and the test fails. No deleted code links into it: most likely a timing race in the first-start lifecycle, not the clean-up.
+- **To check:** whether the tag `pre-cleanup-0.5` shows it too; whether a user can see it (the start-up card's animation skipped).
+- **Status:** open.
+
 ## B-050 · Monomachine: a note added in the piano roll puts another track's sound back to the stored kit
 
 - **From:** a tester on Discord, 2026-10-09, Monomachine Editor 0.3.5: adding a note in a track's piano roll changed another track's sound back to the "original preset"; saving made the problem go away.
