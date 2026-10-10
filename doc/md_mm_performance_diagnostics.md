@@ -60,8 +60,9 @@ Everything the speed-ups switch turns off:
 - **L5** the ColdFire's timers and UART transmitters are stepped when they reach an event, not after
   every instruction.
 - **L4** (step 2, both machines) the DSPs skip the turns of their idle loops that would only pass through the
-  dispatcher, up to the next moment anything is due: the silent-voice NOP loops and the loops that wait on a DMA
-  register (not the loops that wait on Port C).
+  dispatcher, up to the next moment anything is due: the silent-voice NOP loops, the loops that wait on a DMA
+  register (also the Machinedrum's codec wait at p:3c, a loop over several blocks), and the loops that wait on
+  Port C for the other DSP's block sync (MD p:bb, MM p:195).
 - **CMPM fix** (step 2, both machines) the DSP compiler's `cmpm` with the other accumulator as its source no longer
   leaves that accumulator's magnitude behind in it (an emulator bug). Neither firmware runs that form of the
   instruction, so this changes nothing they do; off keeps the old behaviour so that off is the old emulation
