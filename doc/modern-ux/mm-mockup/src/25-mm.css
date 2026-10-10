@@ -106,6 +106,9 @@ img,svg,canvas{-webkit-user-drag:none}
 .ws-seq #main>.lanewrap{border-top:2px solid var(--print);margin-top:5px}
 #seq canvas.roll[data-big]{height:clamp(160px,calc(100vh - 552px),620px)!important}
 .genbar .pagectl .pleds{align-self:center}
+/* the piano roll's Draw key (B) and the length a new note gets (I-007, I-010), beside the page keys */
+.rollkeys{display:flex;align-items:center;gap:6px;flex:none;height:30px}
+.genbar .rollkeys .rolllen{min-width:58px;letter-spacing:.06em;text-transform:none}
 .gnotes .gv b{min-width:3ch}
 #main>.mutband{margin:0 0 12px;flex:none}
 .ws-sound #main>.mutband .gbc .seg{gap:9px}

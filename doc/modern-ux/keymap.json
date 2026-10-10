@@ -1270,6 +1270,40 @@
 			"dispatched": true
 		},
 		{
+			"id": "roll-draw",
+			"scope": "seq",
+			"keys": [
+				"B"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Piano roll: draw notes on / off (off: drag a box round notes to select them, drag them to move, double-click adds one). B taps the tempo on the other workspaces",
+			"short": "Draw",
+			"dispatched": true
+		},
+		{
+			"id": "roll-box",
+			"scope": "seq",
+			"keys": [
+				"drag in an empty place"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Select (Draw off): box notes; the selection takes them from the first trig to the last one's end. Drag the selection: move it",
+			"area": "Roll"
+		},
+		{
+			"id": "roll-length",
+			"scope": "seq",
+			"keys": [
+				"drag a note's end"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "The note's length (a NOTE OFF where it ends; a MIDI note's LEN, 6 a step); new notes get it too. Up to the track's next trig, past the pattern's end onto its start",
+			"area": "Roll"
+		},
+		{
 			"id": "piano-run",
 			"scope": "any",
 			"keys": [
@@ -1437,7 +1471,7 @@
 			],
 			"mod": "",
 			"group": "Transport",
-			"does": "Tap tempo (the average of the last taps; T plays F♯ here)",
+			"does": "Tap tempo (the average of the last taps; T plays F♯ here). On Sequence B is the piano roll's Draw",
 			"dispatched": true
 		},
 		{
@@ -2122,7 +2156,7 @@
 			],
 			"mod": "",
 			"group": "Sequence",
-			"does": "Click an empty step: a note there; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (one undo step)",
+			"does": "Draw on (B): click an empty step: a note there, as long as the Len key says; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (the last one as long as the Len key says; one undo step). Draw off: double-click",
 			"area": "Roll"
 		},
 		{
@@ -2133,7 +2167,7 @@
 			],
 			"mod": "alt",
 			"group": "Sequence",
-			"does": "Click: delete a note (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step",
+			"does": "Click: delete a note, the note before it keeps its length (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step",
 			"area": "Roll"
 		},
 		{

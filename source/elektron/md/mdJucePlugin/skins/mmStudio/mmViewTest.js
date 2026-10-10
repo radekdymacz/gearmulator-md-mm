@@ -60,7 +60,8 @@ function page() {
 	const hold = "\n;const __start = window.MMHost.start; window.MMHost.start = () => { };\n";
 	const src = FILES.map(f => fs.readFileSync(f, "utf8").replace(/^"use strict";/, "") + (/mmAdapter/.test(f) ? hold : "")).join("\n;\n")
 		+ "\n;__start();\nreturn { S: () => S, Overlay, MmView, docStore, storeDoc, MM_SEAM, Dlg, Banner, mockup: { " +
-			"mutApply, genLive, genEnd, setMachine, songAction, secAction, setSel, clearSel, selCut, selDuplicate, selTrigs, selMark, selMove, selGrow, stepMenuItems, Keys, HOST } };";
+			"mutApply, genLive, genEnd, setMachine, songAction, secAction, setSel, clearSel, selCut, selDuplicate, selTrigs, selMark, selMove, selGrow, stepMenuItems, Keys, HOST, " +
+			"rollAdd, rollLen, rollRemove, editSpan, setRollDraw, setRollLen, selMoveTo, selClear, rollBoxed, noteSpans } };";
 	const out = new Function("scope", "with (scope) {\n" + src + "\n}")(scope);
 	const run = () => { for (let n = 0; timers.length && n < 10000; n++) timers.shift()(); };
 	run();
@@ -367,6 +368,66 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	check(r.win.MMView.ctlSetup().sources.some(x => x.id === "R9"), "not ready -> ready: the plug-in's setup is taken");
 }
 
+/* ---- I-007, I-010 (0.5 slice 3): the piano roll's notes with their lengths, as the core's intents ---- */
+{
+	const p = loaded(), S = p.S(), M = p.mockup;
+	const args = m => m.op + " " + JSON.stringify(Object.fromEntries(Object.entries(m).filter(([k]) => !["op", "id", "g", "p"].includes(k))));
+	const take = () => { p.run(); const o = p.sent.filter(m => /Steps|steps|step$|lock/.test(m.op || "")); p.sent.length = 0; return o; };
+	const T = () => S.tracks[0], N = n => ({ n: [n], a: 1, f: 1, l: 1 }), all = new Set([...Array(16).keys()]);
+	/* the view's steps change only by intents (each shows the view again from the documents and its own writes) */
+	const put = (t, map) => { const tr = t < 6 ? S.tracks[t] : S.midi[t - 6]; for (const [s, v] of Object.entries(map)) tr.steps[+s] = v; M.editSpan(t, new Set(Object.keys(map).map(Number)), true); take(); };
+	S.ws = "seq"; S.sel = 0; S.len = 16;
+	put(0, Object.fromEntries([...all].map(s => [s, null])));
+	M.setRollLen(2);
+	let a = M.rollAdd(0, 4, 50); M.editSpan(0, a.touched, a.lock);
+	let o = take();
+	check(o.length === 1 && args(o[0]) === 'steps {"from":4,"to":7,"rows":[{"t":0,"steps":[[4,{"a":1,"f":1,"l":1,"n":[50]}],[6,{"off":true}]],"slide":[]}]}',
+		"a new note of 1/8: its trig and a NOTE OFF two steps later, one steps intent: " + o.map(args).join("; "));
+	check(!!T().steps[4]?.n && !!T().steps[6]?.off, "the view shows them after the intent");
+	put(0, { 8: N(52) });
+	let r = M.rollLen(0, 4, 9); M.editSpan(0, new Set([4, ...r.touched]), r.lock);
+	o = take();
+	check(r.L === 4 && !T().steps[6] && o.length === 1 && args(o[0]) === 'steps {"from":4,"to":7,"rows":[{"t":0,"steps":[[4,{"a":1,"f":1,"l":1,"n":[50]}]],"slide":[]}]}',
+		"dragged longer than the room: up to the next trig on 9, the NOTE OFF on 7 gone: " + o.map(args).join("; "));
+	const ch = M.rollRemove(0, 8); M.editSpan(0, new Set(ch), true);
+	o = take();
+	check(!!T().steps[8]?.off && o.length === 1 && JSON.stringify(o[0].rows[0].steps) === '[[8,{"off":true}]]',
+		"a removed note the note on 5 ran into: a NOTE OFF in its place, so that one keeps its four steps: " + o.map(args).join("; "));
+	const sp = M.noteSpans(0).find(x => x.s === 4);
+	check(sp && sp.e === 8 && sp.wrap === 0, "the roll draws it four steps long: " + JSON.stringify(sp && { s: sp.s, e: sp.e }));
+	put(0, { 14: N(48), 2: { off: 1 } });
+	const w = M.noteSpans(0).find(x => x.s === 14);
+	check(w && w.e === 16 && w.wrap === 2, "a note on step 15 of 16 with a NOTE OFF on step 3: drawn to the end and on at the start (two steps), as the machine plays it");
+	put(0, { 14: null, 2: null });
+	/* the box and the move */
+	check(JSON.stringify(M.rollBoxed(0, { s0: 3, s1: 5, n0: 49, n1: 51 })) === "[4]" && !M.rollBoxed(0, { s0: 9, s1: 12, n0: 49, n1: 51 }).length,
+		"a box takes the notes with a pitch in its rows and a gate in its steps");
+	M.setSel({ t: 0, n: 1, from: 4, to: 9 }); take();
+	M.selMoveTo(10);
+	o = take();
+	check(o.length === 2 && args(o[0]) === 'copyStepsTo {"t":0,"n":1,"from":4,"to":9,"at":10,"dt":0}' && args(o[1]) === 'clearSteps {"t":0,"n":1,"from":4,"to":9}' && o[0].g === o[1].g
+		&& JSON.stringify(S.stepSel) === '{"t":0,"n":1,"from":10,"to":15}', "a drag of the selection moves it: copyStepsTo, then the steps it left cleared, one gesture; the selection where it landed: " + o.map(args).join("; "));
+	/* MIDI: LEN 6 a step */
+	S.sel = 6; put(6, Object.fromEntries([...all].map(s => [s, null])));
+	M.setRollLen(3);
+	a = M.rollAdd(6, 0, 60); M.editSpan(6, a.touched, a.lock);
+	o = take();
+	const kit = S.midi[0].v.MID[0];
+	check((kit === 18 ? !S.locks.get("6|MID.0")?.has(0) : S.locks.get("6|MID.0")?.get(0) === 18) && o.length === 1 && o[0].rows[0].steps.length === 1
+		&& JSON.stringify(o[0].rows[0].locks) === (kit === 18 ? "[]" : "[[7,0,0,18]]"), "a MIDI note of 3/16: LEN 18 on its step (6 a step, measured), no NOTE OFF (kit LEN " + kit + "): " + o.map(args).join("; "));
+	r = M.rollLen(6, 0, 16); M.editSpan(6, new Set([0, ...r.touched]), r.lock);
+	o = take();
+	check((kit === 96 ? !S.locks.get("6|MID.0")?.has(0) : S.locks.get("6|MID.0")?.get(0) === 96) && o.length === 1, "16 steps: LEN 96 (no lock when the kit has it): " + o.map(args).join("; "));
+	r = M.rollLen(6, 0, 24); M.editSpan(6, new Set([0, ...r.touched]), r.lock);
+	o = take();
+	check(r.L === 16 && o.length === 1, "longer than the pattern's 16 steps on a one-note track: up to where it comes round (16 steps)");
+	/* B on Sequence toggles Draw; elsewhere it taps */
+	const b = M.Keys.byId("roll-draw"), tap = M.Keys.byId("tap-tempo");
+	check(b && b.keys[0] === "B" && b.scope === "seq" && tap && tap.keys[0] === "B", "B: Draw on Sequence, tap tempo elsewhere");
+	M.setRollDraw(false);
+	check(S.rollDraw === false, "setRollDraw switches it"); M.setRollDraw(true);
+}
+
 /* ---- K7 (DESIGN-step-selection.md §7): selected steps send the core's block intents, as the Machinedrum page does ---- */
 {
 	const p = loaded(), S = p.S(), M = p.mockup;
@@ -388,7 +449,9 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	check(o.length === 1 && args(o[0]) === 'copyStepsTo {"t":0,"n":2,"from":0,"to":4,"at":4,"dt":0}' && S.stepSel.from === 4 && S.stepSel.to === 8, "⌘D: copyStepsTo right after the block, the selection on the copy: " + o.map(args).join("; "));
 	M.selCut();
 	o = take();
-	check(o.length === 2 && args(o[0]) === 'copySteps {"t":0,"n":2,"from":4,"to":8}' && args(o[1]) === 'clearSteps {"t":0,"n":2,"from":4,"to":8}' && o[0].g === o[1].g, "⌘X: copySteps then clearSteps in one gesture (one undo step): " + o.map(args).join("; "));
+	/* I-010: T2's note on step 4 ran into its trig on 8 (cut): it keeps its length, a NOTE OFF there, in the same gesture */
+	check(o.length === 3 && args(o[0]) === 'copySteps {"t":0,"n":2,"from":4,"to":8}' && args(o[1]) === 'clearSteps {"t":0,"n":2,"from":4,"to":8}' && args(o[2]) === 'step {"t":1,"s":7,"v":{"off":true}}'
+		&& o[0].g === o[1].g && o[1].g === o[2].g, "⌘X: copySteps then clearSteps in one gesture (one undo step), and the note before the block keeps its length (a NOTE OFF where it ended): " + o.map(args).join("; "));
 	M.setSel({ t: 6, n: 1, from: 0, to: 1 });
 	M.secAction("paste");
 	check(!take().length, "a synth block onto a MIDI track: nothing sent (it says so)");

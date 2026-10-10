@@ -46,8 +46,8 @@ check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V, t
 
 /* ---- rule: no two dispatched entries on one key and modifiers, unless both are conditional and known exclusive ---- */
 /* Escape: each closes what is open (the help, a dialog, LEARN, the paste marks, the selection, GLOBAL), one at a time;
-   ← →: the Song's rows or the selected steps (by workspace) */
-const EXCLUSIVE = new Set([" Escape", " ArrowLeft", " ArrowRight"]);
+   ← →: the Song's rows or the selected steps (by workspace); B: the piano roll's Draw on Sequence, tap tempo elsewhere (I-007) */
+const EXCLUSIVE = new Set([" Escape", " ArrowLeft", " ArrowRight", " KeyB"]);
 const by = new Map();
 for (const b of run) for (const id of ids(b)) for (const m of mods(b)) { const k = m + " " + id; by.set(k, [...(by.get(k) || []), b]); }
 const clash = [...by].filter(([k, bs]) => bs.length > 1 && (bs.some(b => !b.when) || !EXCLUSIVE.has(k)));
@@ -57,7 +57,7 @@ check(!clash.length, "no two dispatched entries share a key and modifiers" + (cl
 const has = (m, id) => run.some(b => (b.mod || "") === m && ids(b).includes(id));
 /* R / Alt+R: randomise the selected track / every track (GEN, on Sound MUTATE; MM-PORT-PLAN.md d) */
 const WANT = [["", "KeyR", "randomise the selected track"], ["alt", "KeyR", "randomise every track"], ["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
-	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyM", "mute the selected track"], ["", "KeyB", "tap tempo"], ["", "KeyW", "a black key (C♯)"], ["", "KeyT", "a black key (F♯)"], ["", "KeyP", "a black key (D♯)"],
+	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyM", "mute the selected track"], ["", "KeyB", "tap tempo (and Draw on Sequence)"], ["", "KeyW", "a black key (C♯)"], ["", "KeyT", "a black key (F♯)"], ["", "KeyP", "a black key (D♯)"],
 	["", "ArrowUp", "previous track"], ["", "ArrowDown", "next track"], ["alt", "KeyM", "mute / unmute all"], ["alt", "Delete", "clear the pattern"],
 	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["", "Digit0", "unmute / unsolo all"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"],
 	["", "?", "the list of keys"]];
