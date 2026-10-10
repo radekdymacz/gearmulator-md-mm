@@ -12,6 +12,7 @@
 #include "elektronData/mdSamples.h"
 
 #include "mddevice.h"
+#include "mdsamplesnapshot.h"
 #include "mdsequencerstate.h"
 #include "mmtelemetry.h"
 
@@ -96,11 +97,11 @@ namespace md
 		};
 		std::shared_ptr<const SequencerTelemetry> getSequencerTelemetry() const { return m_sequencerTelemetry; }
 		// P9: the UW's samples (elektronData/mdSamples.h) for the editor: every ROM slot from flash, the RAM
-		// buffers from DSP2's memory. Read on the audio thread a slot a block, only once someone has
-		// asked (readSampleBank) and when the memory changed and has been quiet a moment (an SDS import
-		// writes flash, a RAM-R recording grows its buffer). _sequence: the publication (0 = none yet);
-		// the bank is null until the first one. Any thread.
-		std::shared_ptr<const elektronData::MdSampleBank> readSampleBank(uint32_t& _sequence) const;
+		// buffers from DSP2's memory. The audio thread copies the raw memory a few chunks a block (md::SampleCopy,
+		// no allocation), only once someone has asked (SampleExchange::read) and when the memory changed and has
+		// been quiet a moment (an SDS import writes flash, a RAM-R recording grows its buffer); the reader builds
+		// the list from that copy. Take the exchange under the device lock, read it after releasing the lock.
+		std::shared_ptr<SampleExchange> sampleExchange() const { return m_sampleExchange; }
 		// Read the samples again now, also when the memory did not change.
 		void refreshSampleBank() { m_sampleRefresh.fetch_add(1, std::memory_order_relaxed); }
 
@@ -124,24 +125,21 @@ namespace md
 		void publishSequencerTelemetry(size_t _frames);
 		void scanSamples();
 
-		// P9 sample bank: what the audio thread reads (a slot a block) and what it published.
+		// P9 samples: when the audio thread looks, the copy it makes and what it published.
 		struct SampleScan
 		{
 			const Hardware* of = nullptr;
 			uint64_t blocks = 0;
 			uint64_t seen = 0;			// the signature at the last look
 			uint32_t stable = 0;		// looks it has been the same
-			uint64_t published = 0;		// the signature of the published bank
+			bool published = false;		// a copy was handed over
+			uint64_t publishedSignature = 0;
+			uint64_t copying = 0;		// the signature of the copy in progress
 			uint32_t refresh = 0;		// the refresh requests done
-			bool scanning = false;
-			size_t next = 0;
-			elektronData::MdSampleIndex index;
-			elektronData::MdSampleBank bank;
 		} m_samples;
-		mutable std::mutex m_sampleMutex;
-		std::shared_ptr<const elektronData::MdSampleBank> m_sampleBank;
-		uint32_t m_sampleSequence = 0;
-		mutable std::atomic<bool> m_sampleWanted{false};
+		SampleCopy m_sampleCopy;
+		std::unique_ptr<SampleSnapshot> m_sampleBuffer;	// the audio thread's while it copies
+		std::shared_ptr<SampleExchange> m_sampleExchange = std::make_shared<SampleExchange>();
 		std::atomic<uint32_t> m_sampleRefresh{0};
 
 		elektronData::AuditionMixer m_audition;

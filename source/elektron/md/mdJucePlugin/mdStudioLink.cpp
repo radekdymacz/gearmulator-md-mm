@@ -259,14 +259,16 @@ namespace mdJucePlugin
 	{
 		uint32_t sequence = 0;
 		const void* source = nullptr;
-		auto bank = m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base) -> std::shared_ptr<const elektronData::MdSampleBank>
+		auto exchange = m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base) -> std::shared_ptr<md::SampleExchange>
 		{
 			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			if(!device)
 				return nullptr;
 			source = device;
-			return device->readSampleBank(sequence);
+			return device->sampleExchange();
 		});
+		// the list is built from the audio thread's raw copy here, without the lock the audio thread needs
+		auto bank = exchange ? exchange->read(sequence) : nullptr;
 		if(!bank || (!_again && sequence == m_sampleSequence && source == m_sampleSource))
 			return false;
 		m_sampleSequence = sequence;

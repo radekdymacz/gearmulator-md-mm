@@ -44,6 +44,7 @@ typedef struct {
    float  *Y;
    UWORD   Yp;
    double  Time;
+   int     ownsFilter; /* 0: Imp/ImpD belong to the caller (resample_open_with_filter) */
 } rsdata;
 
 void *resample_dup(const void *	handle)
@@ -57,10 +58,17 @@ void *resample_dup(const void *	handle)
    hp->LpScl = cpy->LpScl;
    hp->Nwing = cpy->Nwing;
 
-   hp->Imp = (float *)malloc(hp->Nwing * sizeof(float));
-   memcpy(hp->Imp, cpy->Imp, hp->Nwing * sizeof(float));
-   hp->ImpD = (float *)malloc(hp->Nwing * sizeof(float));
-   memcpy(hp->ImpD, cpy->ImpD, hp->Nwing * sizeof(float));
+   hp->ownsFilter = cpy->ownsFilter;
+   if (cpy->ownsFilter) {
+      hp->Imp = (float *)malloc(hp->Nwing * sizeof(float));
+      memcpy(hp->Imp, cpy->Imp, hp->Nwing * sizeof(float));
+      hp->ImpD = (float *)malloc(hp->Nwing * sizeof(float));
+      memcpy(hp->ImpD, cpy->ImpD, hp->Nwing * sizeof(float));
+   }
+   else {
+      hp->Imp = cpy->Imp;
+      hp->ImpD = cpy->ImpD;
+   }
 
    hp->Xoff = cpy->Xoff;
    hp->XSize = cpy->XSize;
@@ -77,59 +85,57 @@ void *resample_dup(const void *	handle)
    return (void *)hp;
 }
 
-void *resample_open(int highQuality, double minFactor, double maxFactor)
+static UWORD filterNmult(int highQuality)
 {
-   double *Imp64;
-   double Rolloff, Beta;
+   return highQuality ? 35 : 11;
+}
+
+int resample_filter_size(int highQuality)
+{
+   return Npc*(filterNmult(highQuality)-1)/2;
+}
+
+void resample_build_filter(int highQuality, float *Imp, float *ImpD)
+{
+   const UWORD Nwing = (UWORD)resample_filter_size(highQuality);
+   const double Rolloff = 0.90;
+   const double Beta = 6;
+   double *Imp64 = (double *)malloc(Nwing * sizeof(double));
+   int i;
+
+   lrsLpFilter(Imp64, Nwing, 0.5*Rolloff, Beta, Npc);
+
+   for(i=0; i<Nwing; i++)
+      Imp[i] = Imp64[i];
+
+   /* Storing deltas in ImpD makes linear interpolation
+      of the filter coefficients faster */
+   for (i=0; i<Nwing-1; i++)
+      ImpD[i] = Imp[i+1] - Imp[i];
+
+   /* Last coeff. not interpolated */
+   ImpD[Nwing-1] = - Imp[Nwing-1];
+
+   free(Imp64);
+}
+
+static void *openWithFilter(int highQuality, double minFactor, double maxFactor,
+                            float *Imp, float *ImpD, int ownsFilter)
+{
    rsdata *hp;
    UWORD   Xoff_min, Xoff_max;
    int i;
-
-   /* Just exit if we get invalid factors */
-   if (minFactor <= 0.0 || maxFactor <= 0.0 || maxFactor < minFactor) {
-      #if DEBUG
-      fprintf(stderr,
-              "libresample: "
-              "minFactor and maxFactor must be positive real numbers,\n"
-              "and maxFactor should be larger than minFactor.\n");
-      #endif
-      return 0;
-   }
 
    hp = (rsdata *)malloc(sizeof(rsdata));
 
    hp->minFactor = minFactor;
    hp->maxFactor = maxFactor;
- 
-   if (highQuality)
-      hp->Nmult = 35;
-   else
-      hp->Nmult = 11;
-
+   hp->Nmult = filterNmult(highQuality);
    hp->LpScl = 1.0;
-   hp->Nwing = Npc*(hp->Nmult-1)/2; /* # of filter coeffs in right wing */
-
-   Rolloff = 0.90;
-   Beta = 6;
-
-   Imp64 = (double *)malloc(hp->Nwing * sizeof(double));
-
-   lrsLpFilter(Imp64, hp->Nwing, 0.5*Rolloff, Beta, Npc);
-
-   hp->Imp = (float *)malloc(hp->Nwing * sizeof(float));
-   hp->ImpD = (float *)malloc(hp->Nwing * sizeof(float));
-   for(i=0; i<hp->Nwing; i++)
-      hp->Imp[i] = Imp64[i];
-
-   /* Storing deltas in ImpD makes linear interpolation
-      of the filter coefficients faster */
-   for (i=0; i<hp->Nwing-1; i++)
-      hp->ImpD[i] = hp->Imp[i+1] - hp->Imp[i];
-
-   /* Last coeff. not interpolated */
-   hp->ImpD[hp->Nwing-1] = - hp->Imp[hp->Nwing-1];
-
-   free(Imp64);
+   hp->Nwing = (UWORD)resample_filter_size(highQuality); /* # of filter coeffs in right wing */
+   hp->Imp = Imp;
+   hp->ImpD = ImpD;
+   hp->ownsFilter = ownsFilter;
 
    /* Calc reach of LP filter wing (plus some creeping room) */
    Xoff_min = ((hp->Nmult+1)/2.0) * MAX(1.0, 1.0/minFactor) + 10;
@@ -159,6 +165,44 @@ void *resample_open(int highQuality, double minFactor, double maxFactor)
    hp->Time = (double)hp->Xoff; /* Current-time pointer for converter */
    
    return (void *)hp;
+}
+
+static int validFactors(double minFactor, double maxFactor)
+{
+   /* Just exit if we get invalid factors */
+   if (minFactor <= 0.0 || maxFactor <= 0.0 || maxFactor < minFactor) {
+      #if DEBUG
+      fprintf(stderr,
+              "libresample: "
+              "minFactor and maxFactor must be positive real numbers,\n"
+              "and maxFactor should be larger than minFactor.\n");
+      #endif
+      return 0;
+   }
+   return 1;
+}
+
+void *resample_open(int highQuality, double minFactor, double maxFactor)
+{
+   float *Imp, *ImpD;
+   const int Nwing = resample_filter_size(highQuality);
+
+   if (!validFactors(minFactor, maxFactor))
+      return 0;
+
+   Imp = (float *)malloc(Nwing * sizeof(float));
+   ImpD = (float *)malloc(Nwing * sizeof(float));
+   resample_build_filter(highQuality, Imp, ImpD);
+   return openWithFilter(highQuality, minFactor, maxFactor, Imp, ImpD, 1);
+}
+
+void *resample_open_with_filter(int highQuality, double minFactor, double maxFactor,
+                                const float *Imp, const float *ImpD)
+{
+   if (!validFactors(minFactor, maxFactor) || !Imp || !ImpD)
+      return 0;
+   /* The filter is only read (lrsSrcUp/lrsSrcUD); the handle never writes or frees it. */
+   return openWithFilter(highQuality, minFactor, maxFactor, (float *)Imp, (float *)ImpD, 0);
 }
 
 int resample_get_filter_width(const void   *handle)
@@ -340,7 +384,9 @@ void resample_close(void *handle)
    rsdata *hp = (rsdata *)handle;
    free(hp->X);
    free(hp->Y);
-   free(hp->Imp);
-   free(hp->ImpD);
+   if (hp->ownsFilter) {
+      free(hp->Imp);
+      free(hp->ImpD);
+   }
    free(hp);
 }

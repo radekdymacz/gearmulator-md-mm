@@ -85,6 +85,14 @@ On top of the clean-up, each lever alone, behind the speed-ups switch, gated by 
 | 6 | PGO in the release build: committed profile, both macOS slices, done on perf/pgo (RESEARCH "L6 measured") | MD −7.5 %, MM −5.5 % (measured) | goldens 24 + 6 equal; retrain when stale (CI.md "PGO") |
 | 7 | Try: render ahead (helica1), opt-in, with real-time priority and the audio workgroup | DAW thread lighter | delayed output equal |
 
+Around the core (branch `perf/audio-thread-spikes`, RESEARCH "Around the core"): of six suspected audio-thread
+costs outside the chips, two were real and are fixed bit-exact: the editor's sample list (built on the audio thread
+with 143 allocations, a slot up to 128 us: now a raw copy, at most 13 us a block, built by the reader) and the
+resampler's filter at host rates other than 44.1 kHz (8 copies per instance: now one per process, -40 % of the
+resampler's time). Measured and left: the save's lock hold (0.14 ms), the second machine during a first-run restore
+(once per installation; a worker thread is the fix if testers report crackle on the first project), the link queues
+and the patch-RAM lock (under 0.5 %).
+
 ## User fixes beside it
 
 From the Discord cross-check of 2026-10-10:

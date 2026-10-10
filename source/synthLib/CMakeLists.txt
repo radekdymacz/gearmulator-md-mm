@@ -86,6 +86,12 @@ if(BUILD_TESTING)
 	add_test(NAME synthLibResamplerTimingTest COMMAND synthLibResamplerTimingTest)
 	set_tests_properties(synthLibResamplerTimingTest PROPERTIES LABELS "UnitTest;AudioIo;Midi;Timing")
 
+	add_executable(synthLibResamplerFilterTest synthLibTest/resamplerFilterTest.cpp)
+	target_link_libraries(synthLibResamplerFilterTest PRIVATE synthLib)
+	add_test(NAME synthLibResamplerFilterTest COMMAND synthLibResamplerFilterTest)
+	set_tests_properties(synthLibResamplerFilterTest PROPERTIES LABELS "UnitTest;AudioIo")
+	set_property(TARGET synthLibResamplerFilterTest PROPERTY FOLDER "Gearmulator")
+
 	add_executable(synthLibStateTransactionTest synthLibTest/stateTransactionTest.cpp)
 	target_link_libraries(synthLibStateTransactionTest PRIVATE synthLib)
 	add_test(NAME synthLibStateTransactionTest COMMAND synthLibStateTransactionTest)

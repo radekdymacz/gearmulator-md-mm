@@ -38,14 +38,6 @@ namespace md
 		sendPanelPackets();
 	}
 
-	std::shared_ptr<const elektronData::MdSampleBank> DeskDevice::readSampleBank(uint32_t& _sequence) const
-	{
-		m_sampleWanted.store(true, std::memory_order_relaxed);
-		std::lock_guard lock(m_sampleMutex);
-		_sequence = m_sampleSequence;
-		return m_sampleBank;
-	}
-
 	// P9: the UW sample memory as elektronData reads it, on the thread that owns the hardware.
 	elektronData::MdSampleMemory sampleMemoryOf(Hardware& _hardware)
 	{
@@ -63,54 +55,43 @@ namespace md
 		auto& hardware = getHardware();
 		auto& s = m_samples;
 		if(s.of != &hardware)
-			s = SampleScan{&hardware};
-		if(!m_sampleWanted.load(std::memory_order_relaxed) || getModel() != MachineModel::Machinedrum
+		{
+			s = SampleScan{&hardware};	// another machine (state restore): start over, keep the buffer
+			m_sampleCopy.reset();
+		}
+		if(!m_sampleExchange->wanted() || getModel() != MachineModel::Machinedrum
 			|| hardware.firmwareFingerprint() != g_mdOs163Fingerprint || !hardware.isFirmwareMidiReady())
 			return;
-		const auto memory = sampleMemoryOf(hardware);
-		if(s.scanning)
+		if(m_sampleCopy.active())
 		{
-			// One slot a block: ROM 1-48, then RAM 1-4.
-			if(s.next < elektronData::g_mdRomSlots)
-				s.bank.rom.push_back(elektronData::readMdRomSample(memory, s.index, static_cast<uint8_t>(s.next)));
-			else
-				s.bank.ram.push_back(elektronData::readMdRamSample(memory, s.index, static_cast<uint8_t>(s.next - elektronData::g_mdRomSlots)));
-			if(++s.next < size_t(elektronData::g_mdRomSlots) + elektronData::g_mdRamSlots)
+			// a few chunks a block, then hand the copy over (the reader builds the list from it)
+			if(!m_sampleCopy.copyNext(hardware) || !m_sampleExchange->tryPublish(m_sampleBuffer))
 				return;
-			std::unique_lock lock(m_sampleMutex, std::try_to_lock);
-			if(!lock.owns_lock())
-			{
-				--s.next;	// the last slot again next block, then publish
-				s.bank.ram.pop_back();
-				return;
-			}
-			m_sampleBank = std::make_shared<const elektronData::MdSampleBank>(std::move(s.bank));
-			++m_sampleSequence;
-			s.published = s.index.signature;
-			s.scanning = false;
+			m_sampleCopy.reset();
+			s.published = true;
+			s.publishedSignature = s.copying;
 			return;
 		}
-		// Look at the memory about 10 times a second (64-frame blocks); read it once it is the same twice
+		// Look at the memory about 10 times a second (64-frame blocks); copy it once it is the same twice
 		// and flash has been quiet for 0.3 s, or when asked.
 		if(s.blocks++ % 64)
 			return;
-		const auto signature = elektronData::mdSampleSignature(memory);
+		const auto signature = elektronData::mdSampleSignature(sampleMemoryOf(hardware));
 		s.stable = signature == s.seen ? s.stable + 1 : 0;
 		s.seen = signature;
 		const auto refresh = m_sampleRefresh.load(std::memory_order_relaxed);
 		const bool asked = refresh != s.refresh;
 		auto& uc = hardware.getUC();
 		const bool quiet = !uc.flashDirty() || uc.flashIdleCycles() > 12'000'000;
-		if(!asked && (s.stable < 1 || !quiet || (m_sampleSequence && signature == s.published)))
+		if(!asked && (s.stable < 1 || !quiet || (s.published && signature == s.publishedSignature)))
 			return;
+		if(!m_sampleBuffer)
+			m_sampleBuffer = m_sampleExchange->tryTakeBuffer();
+		if(!m_sampleBuffer)
+			return;	// the reader still has it: next look
 		s.refresh = refresh;
-		s.index = elektronData::indexMdSamples(memory);
-		s.bank = {};
-		s.bank.signature = s.index.signature;
-		s.bank.ramReadable = s.index.ramReadable;
-		s.bank.ramReason = s.index.ramReason;
-		s.next = 0;
-		s.scanning = true;
+		s.copying = signature;
+		m_sampleCopy.begin(*m_sampleBuffer);
 	}
 
 	void DeskDevice::sendPanelPackets()

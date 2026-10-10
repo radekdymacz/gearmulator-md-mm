@@ -10,6 +10,30 @@
 
 #include "dsp56kBase/fastmath.h"
 
+namespace
+{
+	// libresample's low-pass filter (two tables of 69,632 floats, 544 KiB) depends only on its quality, not on the
+	// rates: one immutable copy for the whole process instead of one per channel of every resampler (6 out + 2 in
+	// per plug-in instance). The same floats as resample_open builds, so the output is bit-identical.
+	struct SharedLegacyFilter
+	{
+		std::vector<float> imp, impD;
+		SharedLegacyFilter()
+		{
+			const auto size = static_cast<size_t>(resample_filter_size(1));
+			imp.resize(size);
+			impD.resize(size);
+			resample_build_filter(1, imp.data(), impD.data());
+		}
+	};
+
+	const SharedLegacyFilter& sharedLegacyFilter()
+	{
+		static const SharedLegacyFilter filter;
+		return filter;
+	}
+}
+
 synthLib::Resampler::Resampler(const float _samplerateIn, const float _samplerateOut, const Mode _mode)
 	: m_samplerateIn(_samplerateIn)
 	, m_samplerateOut(_samplerateOut)
@@ -267,7 +291,8 @@ void synthLib::Resampler::setChannelCount(uint32_t _numChannels)
 	}
 	else
 	{
+		const auto& filter = sharedLegacyFilter();
 		for (auto& resampler : m_resamplerOut)
-			resampler = resample_open(1, factor, factor);
+			resampler = resample_open_with_filter(1, factor, factor, filter.imp.data(), filter.impD.data());
 	}
 }
