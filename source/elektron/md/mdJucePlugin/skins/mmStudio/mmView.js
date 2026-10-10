@@ -165,6 +165,44 @@ const MmView = (() => {
 		if (!st || st.off) for (const k of keysOf(v, t)) if (v.locks.get(k).has(s)) out.push([["locks", k, s], DELETE()]);
 		return out;
 	}
+	/* ---- a block of steps (DESIGN-step-selection.md §7; the core's takeSteps and putSteps, mmDeskEdit.cpp) ---- */
+	/* tracks t to t + n - 1, steps [from, to) of the view: per track its steps, slides and locks (page units) */
+	function blockOf(v, t0, n, from, to) {
+		const rows = [];
+		for (let t = t0; t < t0 + n; t++) {
+			const tr = trackOf(v, t), locks = [];
+			for (const k of keysOf(v, t)) {
+				const steps = [...v.locks.get(k)].filter(([s]) => s >= from && s < to).map(([s, x]) => [s - from, x]);
+				if (steps.length) locks.push([k.split("|")[1], steps]);
+			}
+			rows.push({ midi: t >= 6, steps: structuredClone(tr.steps.slice(from, to)), slide: [...tr.slide].filter(s => s >= from && s < to).map(s => s - from), locks });
+		}
+		return { kind: "steps", length: to - from, rows };
+	}
+	/* a block put down with its first step at `at` on track t0, `span` steps (past the block: cleared): it stops at the
+	   pattern's length and at M6, a row lands on a track of its kind only, a lock only on a step that holds one and of
+	   a parameter the track's machine has; what the steps under a row held goes, their locks too */
+	function putWrites(v, block, t0, at, span) {
+		const len = Math.max(2, Math.min(64, v.len)), end = Math.min(at + span, len), out = [];
+		if (at >= len) return out;
+		for (let r = 0; r < block.rows.length && t0 + r < 12; r++) {
+			const row = block.rows[r], t = t0 + r;
+			if (row.midi !== t >= 6) continue;
+			const on = new Set();
+			for (const k of keysOf(v, t)) for (const s of v.locks.get(k).keys()) if (s >= at && s < end) out.push([["locks", k, s], DELETE()]);
+			for (let s = at; s < end; s++) {
+				const rel = s - at, x = rel < row.steps.length ? stepVal(row.steps[rel]) : null, st = pageStep(x, t);
+				out.push([[...trackPath(t), "steps", s], st], [[...trackPath(t), "slide", s], row.slide.includes(rel)]);
+				if (st && !st.off) on.add(s);
+			}
+			for (const [pid, steps] of row.locks) {
+				const [pg, i] = pid.split(".");
+				if (t < 6 && pg === "SYN" && !MACH[v.tracks[t].m]?.p[+i]) continue;	// that machine has no such parameter
+				for (const [rel, x] of steps) if (at + rel < end && on.has(at + rel)) out.push([["locks", t + "|" + pid, at + rel], x]);
+			}
+		}
+		return out;
+	}
 	const ARP = { play: "PLAY", ojmp: "OJMP", mode: "MODE", length: "len" };
 	const rotStep = (s, by, len) => ((s + by) % len + len) % len;
 	const WRITES = {
@@ -244,26 +282,13 @@ const MmView = (() => {
 		},
 		clearSteps: (v, c) => {
 			const out = [];
-			for (let s = c.from; s < c.to; s++) out.push(...stepWrites(v, c.t, s, null), [[...trackPath(c.t), "slide", s], false]);
+			for (let t = c.t; t < c.t + (c.n || 1); t++) for (let s = c.from; s < c.to; s++) out.push(...stepWrites(v, t, s, null), [[...trackPath(t), "slide", s], false]);
 			return out;
 		},
 		copySteps: () => [],
 		/* the core's clipboard; the page shows the paste from its own copy of it (clip: MmView.copied) */
-		pasteSteps: (v, c, clip) => {
-			if (!clip || clip.kind !== "steps" || clip.midi !== c.t >= 6) return [];
-			const to = Math.min(64, c.to ?? c.from + clip.steps.length), out = [], on = new Set();
-			for (let s = c.from; s < to; s++) {
-				const rel = s - c.from, x = rel < clip.steps.length ? stepVal(clip.steps[rel]) : null;
-				out.push(...stepWrites(v, c.t, s, x), [[...trackPath(c.t), "slide", s], clip.slide.includes(rel)]);
-				if (x && !x.off) on.add(s);
-			}
-			for (const [pid, steps] of clip.locks) {
-				const [pg, i] = pid.split(".");
-				if (c.t < 6 && pg === "SYN" && !MACH[v.tracks[c.t].m]?.p[+i]) continue;	// that machine has no such parameter
-				for (const [rel, x] of steps) if (c.from + rel < to && on.has(c.from + rel)) out.push([["locks", c.t + "|" + pid, c.from + rel], x]);
-			}
-			return out;
-		},
+		pasteSteps: (v, c, clip) => clip && clip.kind === "steps" ? putWrites(v, clip, c.t, c.from, (c.to ?? c.from + clip.length) - c.from) : [],
+		copyStepsTo: (v, c) => putWrites(v, blockOf(v, c.t, c.n || 1, c.from, c.to), c.dt ?? c.t, c.at, c.to - c.from),
 		/* ---- Sound and Perform: the kit that plays ---- */
 		machine: (v, c) => machineWrites(v, c.t, C().machineName(c.model), c.keepFx !== false),
 		clearSound: (v, c) => machineWrites(v, c.t, "GND-SIN", false),
@@ -401,15 +426,7 @@ const MmView = (() => {
 	   shows at once (null: not a copy) */
 	function copied(v, cmd) {
 		if (!v || !v.ready) return null;
-		if (cmd.op === "copySteps") {
-			const tr = trackOf(v, cmd.t), locks = [];
-			for (const k of keysOf(v, cmd.t)) {
-				const steps = [...v.locks.get(k)].filter(([s]) => s >= cmd.from && s < cmd.to).map(([s, x]) => [s - cmd.from, x]);
-				if (steps.length) locks.push([k.split("|")[1], steps]);
-			}
-			return { kind: "steps", midi: cmd.t >= 6, steps: structuredClone(tr.steps.slice(cmd.from, cmd.to)),
-				slide: [...tr.slide].filter(s => s >= cmd.from && s < cmd.to).map(s => s - cmd.from), locks };
-		}
+		if (cmd.op === "copySteps") return blockOf(v, cmd.t, cmd.n || 1, cmd.from, cmd.to);
 		if (cmd.op === "copySound") return { kind: "sound", m: v.tracks[cmd.t].m, v: structuredClone(v.tracks[cmd.t].v) };
 		if (cmd.op === "copyRow" && v.song?.[cmd.i] && v.song[cmd.i].type !== "end") return { kind: "row", row: structuredClone(v.song[cmd.i]) };
 		return null;

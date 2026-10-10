@@ -3322,7 +3322,7 @@
         },
         {
           "type": "object",
-          "description": "core: a track's steps, slides and locks in [from, to)",
+          "description": "core: the steps, slides and locks in [from, to) of tracks t to t + n - 1 (n 1 without it)",
           "required": ["op", "p", "t", "from", "to"],
           "properties": {
             "op": {
@@ -3348,6 +3348,11 @@
               "minimum": 0,
               "maximum": 11
             },
+            "n": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
             "from": {
               "type": "integer",
               "minimum": 0,
@@ -3363,7 +3368,7 @@
         },
         {
           "type": "object",
-          "description": "core: a track page to the clipboard",
+          "description": "core: a block of steps (tracks t to t + n - 1, steps [from, to)) into the clipboard: notes, NOTE OFFs, envelope trigs, slides, locks",
           "required": ["op", "p", "t", "from", "to"],
           "properties": {
             "op": {
@@ -3389,6 +3394,11 @@
               "minimum": 0,
               "maximum": 11
             },
+            "n": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
             "from": {
               "type": "integer",
               "minimum": 0,
@@ -3404,7 +3414,7 @@
         },
         {
           "type": "object",
-          "description": "core: the clipboard's page from step from; [from, to) is cleared first (default: the page's own length)",
+          "description": "core: the clipboard's block with its first step at from on track t; it stops at the pattern's length and M6, a row lands on a track of its kind (synth or MIDI); to (a page): [from, to) is cleared past the block",
           "required": ["op", "p", "t", "from"],
           "properties": {
             "op": {
@@ -3439,6 +3449,62 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a block of steps copied within the pattern to step at of track dt (its own track without dt), the clipboard untouched: duplicate, the ⌘-drag",
+          "required": ["op", "p", "t", "from", "to", "at"],
+          "properties": {
+            "op": {
+              "const": "copyStepsTo"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "at": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "dt": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
             }
           },
           "additionalProperties": false

@@ -104,7 +104,7 @@ namespace mmDesk
 		}
 	};
 
-	// What copy puts aside for paste: a track page (copySteps, pasteSteps), a track's sound (copySound, pasteSound), a
+	// What copy puts aside for paste: a block of steps (copySteps, pasteSteps), a track's sound (copySound, pasteSound), a
 	// song row (copyRow, pasteRow), a stored kit or pattern (the library's kitCopy, patCopy). Values only; nothing
 	// refers back.
 	struct Clipboard
@@ -117,14 +117,24 @@ namespace mmDesk
 
 			bool operator==(const Sound& _o) const { return machine == _o.machine && pages == _o.pages; }
 		};
+		// A block of steps (DESIGN-step-selection.md §7): `length` steps of one or more neighbouring tracks (a
+		// selection, steps x tracks; a track page is a block of one row). Steps, slide bits and lock steps are
+		// relative to the block's first step.
 		struct Steps
 		{
-			bool midi = false;								// a MIDI sequencer track's page (pastes onto MIDI tracks only)
-			std::vector<StepValue> steps;					// the page's steps, from its first
-			uint64_t slide = 0;								// bit = step from the first
-			std::map<std::pair<uint8_t, uint8_t>, std::map<uint8_t, uint8_t>> locks;	// (page, param) -> step -> value
+			struct Row
+			{
+				bool midi = false;								// a MIDI sequencer track's row (pastes onto MIDI tracks only)
+				std::vector<StepValue> steps;					// the row's steps, from the block's first
+				uint64_t slide = 0;								// bit = step from the first
+				std::map<std::pair<uint8_t, uint8_t>, std::map<uint8_t, uint8_t>> locks;	// (page, param) -> step -> value
 
-			bool operator==(const Steps& _o) const { return midi == _o.midi && steps == _o.steps && slide == _o.slide && locks == _o.locks; }
+				bool operator==(const Row& _o) const { return midi == _o.midi && steps == _o.steps && slide == _o.slide && locks == _o.locks; }
+			};
+			size_t length = 0;
+			std::vector<Row> rows;	// the block's tracks, top to bottom
+
+			bool operator==(const Steps& _o) const { return length == _o.length && rows == _o.rows; }
 		};
 		std::optional<Steps> steps;
 		std::optional<Sound> sound;

@@ -11,6 +11,7 @@ add_library(deskCore STATIC)
 
 target_sources(deskCore PRIVATE
 	deskAdapter.h
+	deskBlocks.h
 	deskCapabilities.h
 	deskChain.h
 	deskCommands.cpp deskCommands.h
