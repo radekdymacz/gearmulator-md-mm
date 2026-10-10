@@ -440,13 +440,14 @@ skippable block runs per frame stopped / playing: about 1 % of the MM).
 | Lever | Commit | MD stopped | MD playing | MM stopped | MM playing | Bit-exact |
 |---|---|---|---|---|---|---|
 | L4 poll loops over several blocks (MD p:3c) | `4c7be9f22` | −1.8 % / −1.9 % | −1.9 % / −2.4 % | −0.4 % / −0.5 % | −0.9 % / −2.0 % | yes (goldens 30/30) |
-| L4 Port C declared pure (MD p:bb, MM p:195), against the row before | see branch | −8.0 % / −5.4 % | −7.5 % / −5.1 % | −2.1 % / −0.9 % | −3.6 % / −2.4 % | yes (goldens 30/30) |
+| L4 Port C declared pure (MD p:bb, MM p:195), against the row before | `5068b4e47` | −8.0 % / −5.4 % | −7.5 % / −5.1 % | −2.1 % / −0.9 % | −3.6 % / −2.4 % | yes (goldens 30/30) |
 | **Both against main** | | **−9.5 % / −7.0 %** | **−9.1 % / −6.5 %** | **−2.4 % / −2.1 %** | **−4.4 % / −3.6 %** | yes |
 
 Measured as in "Step 2 measured" (host instructions / cycles per frame, `mdmmPerfGateTest` md-busy / mm-a01, stereo,
 speed-ups on, release configuration: ThinLTO, the committed PGO profile, arm64), medians of 4 paired ABBA rounds
-against the build before it on a loaded Mac (load 3-20). The PGO profile goes stale for `source/dsp56300` with these levers (the
-build warns; the changed functions get no profile data) and should be retrained before the release that ships them
+against the build before it on a loaded Mac (load 3-20). The committed PGO profile (fresh on main) goes stale with these levers for
+`source/dsp56300/source/dsp56kEmu` and `source/elektron/md/mdLib` (the build warns; the changed functions get no
+profile data; the gains above were measured that way) and should be retrained before the release that ships them
 (`scripts/macos/train_mdmm_pgo.sh`).
 
 Gates, each lever: the committed goldens 30/30 (MD and MM, all scenarios, stereo and six outputs, speed-ups on and
