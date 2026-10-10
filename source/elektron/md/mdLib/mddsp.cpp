@@ -117,6 +117,10 @@ namespace md
 		// Compile the idle fast-forward call into NOP-only DO loop bodies (the silent-voice stubs). Whether it skips
 		// anything is the speed-ups switch's (L4, Hardware::setSpeedUps); off, the call returns at once.
 		config.nopLoopFastForward = true;
+		// And into the blocks that poll a DMA register in a loop of their own (JitBlock::isIdlePollLoop: the MM's
+		// p:17f and p:18d; the MD's polls sit below P:$100, where blocks are two words, and the Port C polls read
+		// through Hardware's edge logic, so neither qualifies). Same switch.
+		config.pollLoopFastForward = true;
 #if defined(__APPLE__) && defined(__aarch64__)
 		// JIT blocks are first compiled synchronously by the audio thread. On Apple
 		// silicon, the optimizer's cold cost exceeds its measured steady-state gain.

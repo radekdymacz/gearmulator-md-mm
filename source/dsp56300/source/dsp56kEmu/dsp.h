@@ -525,6 +525,13 @@ namespace dsp56k
 		// ends. The block then runs on from that boundary as usual: every test that can fire runs at the same count.
 		ASMJIT_NOINLINE void fastForwardNopLoop(uint32_t _instructionsPerTurn, uint32_t _cyclesPerTurn, uint32_t _turnsPerExit) noexcept;
 
+		// Called by an idle poll loop block (JitBlock::isIdlePollLoop) at its end, when it has just branched back to
+		// itself. Its next turns read the same DMA register, which only a peripheral run changes, and compute the same
+		// registers from it, so each repeats this turn exactly and branches back again: they change nothing but the two
+		// counters. The block returns to the dispatcher after every turn; the turns are skipped up to the last
+		// boundary at which the dispatcher's tests all pass (as in fastForwardNopLoop).
+		ASMJIT_NOINLINE void fastForwardPollLoop(uint32_t _instructionsPerTurn, uint32_t _cyclesPerTurn) noexcept;
+
 	private:
 
 		std::string getSSindent() const;

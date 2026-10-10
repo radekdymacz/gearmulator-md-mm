@@ -77,6 +77,7 @@ namespace dsp56k
 		void parallelMoveXY();
 		void boundedDispatch();
 		void nopLoopFastForward();
+		void pollLoopFastForward();
 		void programMemoryInvalidation();
 
 		void emit(TWord _opA, TWord _opB = 0, TWord _pc = 0) override;

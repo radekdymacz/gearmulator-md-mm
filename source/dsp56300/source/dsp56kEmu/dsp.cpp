@@ -376,6 +376,35 @@ namespace dsp56k
 		m_fastForwardedTurns += turns;
 	}
 
+	void DSP::fastForwardPollLoop(const uint32_t _instructionsPerTurn, const uint32_t _cyclesPerTurn) noexcept
+	{
+		if(!m_idleFastForward || !m_fastForwardCycleLimit || !_instructionsPerTurn || !_cyclesPerTurn)
+			return;
+
+		if(m_interruptFunc != m_execPeripheralsFunc)
+			return;
+
+		// the most turns t with every boundary 0..t passing: count + t * perTurn < target (0 if this one fails)
+		const auto turnsBefore = [](const uint64_t _now, const uint64_t _target, const uint64_t _perTurn) -> uint64_t
+		{
+			return _target > _now ? (_target - _now - 1) / _perTurn : 0;
+		};
+
+		const auto* p = perif[0];
+
+		uint64_t turns = turnsBefore(m_instructions, p->getTargetClock(), _instructionsPerTurn);
+		turns = std::min(turns, turnsBefore(m_cycles, m_fastForwardCycleLimit, _cyclesPerTurn));
+		if(p->hasCycleDeadline())
+			turns = std::min(turns, turnsBefore(m_cycles, p->getTargetCycle(), _cyclesPerTurn));
+
+		if(!turns)
+			return;
+
+		m_instructions += turns * _instructionsPerTurn;
+		m_cycles += turns * _cyclesPerTurn;
+		m_fastForwardedTurns += turns;
+	}
+
 	void DSP::onInvalidPC(const TWord _pc) noexcept
 	{
 		// execJit() bounds-checks the PC against the SIZE OF THE DISPATCH TABLE, which is what makes indexing it

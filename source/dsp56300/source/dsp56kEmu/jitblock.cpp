@@ -8,6 +8,7 @@
 #include "jitops.h"
 #include "memory.h"
 #include "opcodecycles.h"
+#include "peripherals.h"
 
 namespace dsp56k
 {
@@ -46,6 +47,146 @@ namespace dsp56k
 		{
 			_dsp->fastForwardNopLoop(_instructionsPerTurn, _cyclesPerTurn, _turnsPerExit);
 		}
+
+		void callFastForwardPollLoop(DSP* _dsp, const uint32_t _instructionsPerTurn, const uint32_t _cyclesPerTurn)
+		{
+			_dsp->fastForwardPollLoop(_instructionsPerTurn, _cyclesPerTurn);
+		}
+
+		// The ops an idle poll loop may hold besides its final branch: register-only ALU work that does not take the
+		// condition codes as an input (the conditions of Ifcc and of the branch are tested separately), NOPs, and
+		// reads of DMA registers, which have no side effect and change only in a peripheral run.
+		bool isPollLoopAlu(const Instruction _inst)
+		{
+			switch(_inst)
+			{
+			case Add_SD: case Sub_SD: case Cmp_S1S2: case Cmpm_S1S2: case Tst: case And_SD: case Or_SD: case Eor_SD:
+			case Tfr: case Clr: case Abs: case Neg:
+				return true;
+			default:
+				return false;
+			}
+		}
+
+		bool isPollLoopImmediateAlu(const Instruction _inst)
+		{
+			switch(_inst)
+			{
+			case Add_xx: case Add_xxxx: case Sub_xx: case Sub_xxxx: case Cmp_xxS2: case Cmp_xxxxS2: case And_xx:
+			case And_xxxx: case Or_xx: case Or_xxxx:
+				return true;
+			default:
+				return false;
+			}
+		}
+
+		bool isDmaRegisterRead(const Instruction _inst, const TWord _op)
+		{
+			if(_inst != Movep_Spp)
+				return false;
+			if(getFieldValue<Movep_Spp, Field_W>(_op) || getFieldValue<Movep_Spp, Field_s>(_op))
+				return false;	// a write, or Y space
+			const TWord addr = getFieldValue<Movep_Spp, Field_pppppp>(_op) + 0xffffc0;
+			return addr >= XIO_DCR5 && addr <= XIO_DSTR;
+		}
+	}
+
+	void JitBlock::emitFastForwardGate(const asmjit::Label& _skip, const uint64_t _cyclesAhead)
+	{
+		// Skip the call unless _cyclesAhead more cycles stay below the run's stop and the peripherals' cycle deadline.
+		// Signed compares: a limit of 0 (none published, or the fast-forward off) always skips.
+		const auto* periph = m_dsp.getPeriph(0);
+		const RegGP value(*this);
+		const RegGP horizon(*this);
+		mem().mov(r64(horizon), m_dsp.getCycles());
+		m_asm.add(r64(horizon), asmjit::Imm(_cyclesAhead));
+		mem().mov(r64(value), m_dsp.getFastForwardCycleLimit());
+		m_asm.cmp(r64(value), r64(horizon));
+		m_asm.jle(_skip);
+		const auto noDeadline = m_asm.newLabel();
+		mem().mov(r32(value), reinterpret_cast<const uint8_t&>(periph->hasCycleDeadline()));
+		m_asm.test_(r32(value));
+		m_asm.jz(noDeadline);
+		mem().mov(r64(value), periph->getTargetCycle());
+		m_asm.cmp(r64(value), r64(horizon));
+		m_asm.jle(_skip);
+		m_asm.bind(noDeadline);
+	}
+
+	bool JitBlock::isIdlePollLoop(const JitBlockInfo& _info, const TWord _pc, const bool _isFastInterrupt, const std::set<TWord>& _loopEnds) const
+	{
+		// A block that ends in a conditional branch to its own start, and whose turns repeat each other: it reads only
+		// DMA registers, writes no memory, and no register it reads carries a value from the turn before (every one
+		// is either never written in the block or written before it is read). The words are the ones in P memory now:
+		// a write to them destroys the block.
+		if(!m_config.pollLoopFastForward || _isFastInterrupt)
+			return false;
+		if(_info.terminationReason != JitBlockInfo::TerminationReason::Branch || _info.branchTarget != _pc || !_info.branchIsConditional)
+			return false;
+		if(_info.hasFlag(JitBlockInfo::Flags::IsLoopBodyBegin) || _info.hasFlag(JitBlockInfo::Flags::ModeChange))
+			return false;
+		if(_loopEnds.find(_pc + _info.memSize) != _loopEnds.end())
+			return false;
+
+		const auto& opcodes = m_dsp.opcodes();
+
+		const auto notMask = [](const RegisterMask _m) { return static_cast<RegisterMask>(~static_cast<uint64_t>(_m)); };
+
+		auto writtenSoFar = RegisterMask::None;
+		auto carried = RegisterMask::None;
+
+		for(TWord q = 0; q < _info.memSize;)
+		{
+			TWord opA, opB;
+			m_dsp.memory().getOpcode(_pc + q, opA, opB);
+
+			Instruction instA, instB;
+			opcodes.getInstructionTypes(opA, instA, instB);
+
+			const auto len = Opcodes::getOpcodeLength(opA, instA, instB);
+			if(!len)
+				return false;
+
+			const bool last = q + len == _info.memSize;
+
+			if(last)
+			{
+				if(instB != Invalid || (instA != Bcc_xxxx && instA != Bcc_xxx && instA != Jcc_xxx))
+					return false;
+			}
+			else if(instA == Nop)
+			{
+			}
+			else if(isDmaRegisterRead(instA, opA) || isPollLoopImmediateAlu(instA))
+			{
+				if(instB != Invalid)
+					return false;
+			}
+			else if(isPollLoopAlu(instA))
+			{
+				if(instB != Move_Nop && instB != Ifcc && instB != Ifcc_U)
+					return false;
+			}
+			else
+			{
+				return false;
+			}
+
+			auto written = RegisterMask::None;
+			auto read = RegisterMask::None;
+			if(instA == Movep_Spp)
+				written = getRegisters(Movep_Spp, Field_dddddd, opA);	// getRegisters() leaves out a movep's destination
+			else
+				Opcodes::getRegisters(written, read, opA, instA, instB);
+
+			carried |= read & notMask(writtenSoFar);
+			writtenSoFar |= written;
+
+			q += len;
+		}
+
+		// the PC is the branch's; every other register written must not be read before it is written
+		return (carried & writtenSoFar & notMask(RegisterMask::PC)) == RegisterMask::None;
 	}
 
 	bool JitBlock::isNopLoopBody(const JitBlockInfo& _info, const TWord _pc, const bool _isFastInterrupt) const
@@ -349,25 +490,11 @@ namespace dsp56k
 			// tests everything again, exactly; this only saves calls that could not skip anything. Signed compares:
 			// a limit of 0 (none published, or the fast-forward off) fails the first test.
 			const auto noCall = m_asm.newLabel();
+			emitFastForwardGate(noCall, static_cast<uint64_t>(m_config.maxDoIterations) * info.cycleCount);
 			{
-				const auto* periph = m_dsp.getPeriph(0);
-				const RegGP value(*this);
-				const RegGP horizon(*this);
-				mem().mov(r64(horizon), m_dsp.getCycles());
-				m_asm.add(r64(horizon), asmjit::Imm(static_cast<uint64_t>(m_config.maxDoIterations) * info.cycleCount));
-				mem().mov(r64(value), m_dsp.getFastForwardCycleLimit());
-				m_asm.cmp(r64(value), r64(horizon));
-				m_asm.jle(noCall);
-				const auto noDeadline = m_asm.newLabel();
-				mem().mov(r32(value), reinterpret_cast<const uint8_t&>(periph->hasCycleDeadline()));
-				m_asm.test_(r32(value));
-				m_asm.jz(noDeadline);
-				mem().mov(r64(value), periph->getTargetCycle());
-				m_asm.cmp(r64(value), r64(horizon));
-				m_asm.jle(noCall);
-				m_asm.bind(noDeadline);
-				mem().mov(r32(value), reinterpret_cast<const uint32_t&>(m_dsp.regs().lc.var));
-				m_asm.cmp(r32(value), asmjit::Imm(m_config.maxDoIterations));
+				const RegGP lc(*this);
+				mem().mov(r32(lc), reinterpret_cast<const uint32_t&>(m_dsp.regs().lc.var));
+				m_asm.cmp(r32(lc), asmjit::Imm(m_config.maxDoIterations));
 				m_asm.jle(noCall);
 			}
 			{
@@ -511,6 +638,33 @@ namespace dsp56k
 		}
 
 		assert(_rt.getEncodedCycleCount() >= _rt.getEncodedInstructionCount());
+
+		if(isIdlePollLoop(info, _pc, isFastInterrupt, _loopEnds))
+		{
+			// The last op branched: if back to this block, its next turns repeat this one (DSP::fastForwardPollLoop).
+			// Gate as for the NOP loops, here with one turn: the call only runs when a turn fits before the stop and
+			// the deadline. The DSP registers stay in host registers across the call; it changes only the counters,
+			// which the block keeps in memory.
+			const auto noCall = m_asm.newLabel();
+			{
+				const auto pc = r32(m_dspRegPool.get(PoolReg::DspPC, true, false));
+				const RegGP first(*this);
+				m_asm.mov(r32(first), asmjit::Imm(_pc));
+				m_asm.cmp(pc, r32(first));
+				m_asm.jnz(noCall);
+			}
+			emitFastForwardGate(noCall, _rt.getEncodedCycleCount());
+			{
+				const FuncArg r0(*this, 0);
+				const FuncArg r1(*this, 1);
+				const FuncArg r2(*this, 2);
+				mem().makeDspPtr(r0);
+				m_asm.mov(r32(r1), asmjit::Imm(_rt.getEncodedInstructionCount()));
+				m_asm.mov(r32(r2), asmjit::Imm(_rt.getEncodedCycleCount()));
+				stack().call(asmjit::func_as_ptr(&callFastForwardPollLoop));
+			}
+			m_asm.bind(noCall);
+		}
 
 		if (info.terminationReason == JitBlockInfo::TerminationReason::PopPC)
 			blockFlags |= JitOps::PopPC;

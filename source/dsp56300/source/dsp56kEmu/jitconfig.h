@@ -31,6 +31,10 @@ namespace dsp56k
 		// with that switch off the call returns at once and the loop runs as it always did.
 		bool nopLoopFastForward = false;
 
+		// Emit the idle fast-forward call at the end of a block that polls a DMA register and branches back to itself,
+		// and whose turns repeat the same state (JitBlock::isIdlePollLoop, DSP::fastForwardPollLoop). Switched as above.
+		bool pollLoopFastForward = false;
+
 		// needs to be true if there is code that executes code in interrupt regions as regular jumps
 		bool dynamicFastInterrupts = false;
 
