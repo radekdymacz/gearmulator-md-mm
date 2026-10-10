@@ -1684,21 +1684,24 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 .pbtake{font:12px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 /* a value in the manual's units (RAM-R LEN, RATE) beside the raw one */
 .pc .pu{position:relative;margin-left:auto;margin-right:8px;font:11px var(--mono);font-style:normal;color:var(--keydim);white-space:nowrap}
-/* Sound (round 5): the track's sound in small groups (renderSound), in the page's section look: a title
-   on a rule, the Machinedrum page at its right, no frame. Each row is one grid of three lines (titles,
-   screens, boxes) its columns share (subgrid), so a row's titles, screens and boxes are level. Two
-   groups without a screen share a column: the upper one's boxes at the screens' top, the lower one's
-   title at their foot and its boxes on the box line; a lone one says what its knobs do in the screen's
-   place. The rows with screens share the free height evenly, so every screen on the page is as tall;
-   a row without screens is two lines. A group's width follows its box count. Each screen's help is its
-   tooltip. */
+/* Sound, both editors (the markup: deskSoundLayout.js soundRow): the track's sound in small groups, in the page's
+   section look: a title on a rule, the machine's page at its right, no frame. Each row is one grid of three lines
+   (titles, screens, boxes) its columns share (subgrid), so a row's titles, screens and boxes are level. Two groups
+   without a screen share a column: the upper one's boxes at the screens' top, the lower one's title at their foot
+   and its boxes on the box line; a lone one says what its knobs do in the screen's place. The rows with screens
+   share the free height evenly, so every screen on the page is as tall; a row without screens is two lines. A
+   group's width follows its box count. Each screen's help is its tooltip. A page sets --sgbox (the box line, 34px)
+   and --sgmax (a row's most, 420px) where its boxes differ. Each page's stylesheet takes this file in at its marker
+   (as deskGenBar.css). */
 #main>.snd{flex:1 1 auto;min-height:0}
 .snd{display:flex;flex-direction:column;gap:16px;min-height:0}
 .sndhead{display:flex;align-items:center;gap:22px;min-width:0}
-.sndhelp{margin-left:auto;font:12px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;cursor:help}
-.sgrow{flex:1 1 0;min-height:0;max-height:420px;display:grid;grid-template-rows:auto minmax(0,1fr) 34px;column-gap:14px;row-gap:7px;min-width:0}
-.sgrow.flat{flex:none;grid-template-rows:auto 34px}
-.sgcol{grid-row:1/-1;display:grid;grid-template-rows:subgrid;row-gap:7px;min-width:0}
+.sgrow{flex:1 1 0;min-height:0;max-height:var(--sgmax,420px);display:grid;grid-template-rows:auto minmax(0,1fr) var(--sgbox,34px);column-gap:14px;row-gap:7px;min-width:0}
+.sgrow.flat{flex:none;grid-template-rows:auto var(--sgbox,34px)}
+/* a column takes its row's three lines (subgrid); an engine without subgrid (macOS 12, Safari 15) skips that and
+   keeps the same three lines of its own: one-line titles and one box line, so they are level all the same */
+.sgcol{grid-row:1/-1;display:grid;grid-template-rows:auto minmax(0,1fr) var(--sgbox,34px);grid-template-rows:subgrid;row-gap:7px;min-width:0}
+.sgrow.flat>.sgcol{grid-template-rows:auto var(--sgbox,34px);grid-template-rows:subgrid}
 .sg{display:contents}
 .sg>*{grid-column:1}
 .sg>header{grid-row:1;border-top:2px solid var(--print);padding-top:7px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
@@ -1712,6 +1715,7 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 .sgcol.stack>.sg:last-child>header{grid-row:2;align-self:end}
 /* a lone group: what its knobs do where the screen would be */
 .sgnote{grid-row:2;margin:0;align-self:start;font:12px var(--mono);line-height:1.5;color:var(--print3);overflow:hidden;min-height:0}
+.sndhelp{margin-left:auto;font:12px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;cursor:help}
 .sg .plot>canvas.ed,.sg .plot>.wavebox{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
 .sg .plot>.wavebox>canvas.ed{height:100%!important;min-height:0!important}
 .plotnote{position:absolute;left:8px;right:60px;bottom:5px;font:10px var(--pix);text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
@@ -1777,14 +1781,21 @@ body.althold #clearLane{color:var(--led);box-shadow:inset 0 0 0 1px var(--led)}
    title row (Again cream). The bar replaced the old foot row: its height went half to the grid's rows, half to
    the lock lane. Under 1400 px the hints go and the gaps narrow; the summary shrinks to what fits. */
 :root{--genband:58px;--row:clamp(18px,calc((100vh - 428px - var(--genband) / 2) / 16 - 3px),40px)!important}
+/* The GEN bar (Sequence) and the MUTATE bar (Sound), both editors (DESIGN-generators.md §5; the bars' markup:
+   deskGenBar.js). The GEN bar is the one bar under the step grid or the piano roll: GEN, a divider, the step
+   gestures behind a small ? key, then PAGE (its LEDs, ALL, FOL) at the far right; the MUTATE bar takes the rest of
+   the Sound head's row. Left to right: a title with its target (Alt: all, in the LED's colour), groups (a title on a
+   thin rule over their controls: LED radio rows, LCD value windows with the label inside, drag / wheel / arrows), a
+   muted summary, then the keys: small square caps with the keyboard key on them and a tiny label over them, in the
+   groups' title row (Random cream). Under 1400 px the hints go and the gaps narrow; the summary shrinks to what
+   fits. Each page's stylesheet takes this file in at its marker (sync-mdstudio-skin.py, the MM mockup's build.sh),
+   so the cascade is as it was; what only one editor has stays in its own stylesheet. */
 .genbar{display:flex;align-items:flex-end;gap:14px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;position:relative;flex:none;white-space:nowrap}
 .genbar>.genband{flex:1 1 auto;align-self:stretch;height:auto;margin:0;padding:0;background:none;border-radius:0}
 .gdiv{align-self:stretch;width:1px;flex:none;background:var(--rule)}
 .genbar .pagectl{position:static!important;height:30px!important;background:none!important;padding:0!important;margin:0!important;flex:none}
 .genbar .pgkey{height:30px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
 .genbar .ptog{margin-left:2px}
-#seqp>.genbar{flex:none}
-#seqp>.lanewrap{border-top:2px solid var(--print);margin-top:5px}
 .steplegend{position:relative;flex:none;height:30px;display:flex;align-items:center}
 .glegkey{width:22px;height:22px;padding:0;border-radius:50%;font:700 12px var(--sans);letter-spacing:0;display:grid;place-items:center}
 .glegpop.legend{display:none;position:absolute;right:-6px;bottom:calc(100% + 24px);z-index:30;flex-direction:column;align-items:stretch;gap:7px;margin:0;padding:10px 12px;background:var(--plate);border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 0 0 1px var(--rule);white-space:normal;width:300px;font:12px var(--sans);color:var(--print2)}
@@ -1829,18 +1840,20 @@ body.althold #clearLane{color:var(--led);box-shadow:inset 0 0 0 1px var(--led)}
 .kc:disabled kbd,.kc:disabled small{opacity:.4}
 .kc:focus-visible{outline:none}
 .kc:focus-visible kbd{outline:2px solid var(--led);outline-offset:1px}
-.gkeys .gmut{height:30px;padding:0 11px;margin-right:4px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;flex:none}
 .ghint{font:11px var(--mono);color:var(--print3)}
 .sndhead .mutband{flex:1 1 auto;margin:0}
-/* a control surface: nothing selects on a drag but the text fields (mdDeskRender.js refuses selectstart there too) */
-body{-webkit-user-select:none;user-select:none}
-input,textarea,select,[contenteditable]:not([contenteditable=false]),.selectable{-webkit-user-select:text;user-select:text}
-img,svg,canvas{-webkit-user-drag:none}
 @media (max-width:1400px){.genband{gap:12px;padding-inline:10px}.genbar{gap:10px}.genbar>.genband{padding:0}.gbt{min-width:0}.gbc .seg{gap:9px}.gkeys{gap:7px}.ghint{display:none}.genbar .pgkey{padding:0 7px}}
 @media (max-width:1340px){.genband{gap:8px}.genbar{gap:8px}.gkeys{gap:5px}.gbc{gap:4px}.gbc .seg{gap:6px;margin-right:0}.gbc .seg button{letter-spacing:.06em}.gv{padding:0 6px;min-width:50px}.genbar .pgkey{padding:0 6px}.genbar .ptog{margin-left:0}}
 @media (max-width:1500px){.genband:has(.gwrite) .gsum{display:none}}
 .th .nm:has(.gtag){gap:4px}
 .th .nm .gtag{font:10px var(--pix);font-style:normal;color:var(--ink);background:var(--lcd);padding:0 3px;border-radius:2px;margin-left:auto;flex:none;align-self:center;white-space:nowrap}
+#seqp>.genbar{flex:none}
+#seqp>.lanewrap{border-top:2px solid var(--print);margin-top:5px}
+.gkeys .gmut{height:30px;padding:0 11px;margin-right:4px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;flex:none}
+/* a control surface: nothing selects on a drag but the text fields (mdDeskRender.js refuses selectstart there too) */
+body{-webkit-user-select:none;user-select:none}
+input,textarea,select,[contenteditable]:not([contenteditable=false]),.selectable{-webkit-user-select:text;user-select:text}
+img,svg,canvas{-webkit-user-drag:none}
 .snd.mutating .mutg{all:unset;cursor:pointer;border-bottom:1px dashed currentColor}
 .snd.mutating .mutg[aria-pressed=true]{background:var(--lcd);color:var(--ink);padding:0 5px;border-radius:2px;border-bottom:0}
 /* Small comforts (DESIGN-generators.md §7, mdDeskComforts.js): the lock budget over the lock lane (as the top bar's

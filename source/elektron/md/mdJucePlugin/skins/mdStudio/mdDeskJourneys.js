@@ -1067,6 +1067,13 @@ const MdJourneys = (() => {
 	const shotsGlobal = { name: "md-shots-global", needs: () => !/md-shots/.test(location.search) ? "screenshots only when asked by name" : null,
 		steps: [{ say: "open GLOBAL", act: async u => { await u.pick("engsel", "global"); await sleep(800); shot("global-md"); }, screen: () => ok(!$1("#globpop").hidden, "closed"), hold },
 			{ say: "Esc", act: u => { u.key("Escape"); shot("done"); } }] };
+	/* 0.5 slice 5: the Sound page and the GEN bar as screenshots, beside the Monomachine Editor's (mm-shots-sound) */
+	const shotsSound = { name: "md-shots-sound", needs: () => !/md-shots/.test(location.search) ? "screenshots only when asked by name" : null,
+		steps: [go("sound"), sel(() => soundTrack()),
+			{ say: "the Sound page", act: async () => { await sleep(800); shot("sound-md"); Journey.snapshot("sound-md"); Bridge.log("MEASURE sound-md screens " + [...document.querySelectorAll(".snd .sg>.plot")].map(e => Math.round(e.getBoundingClientRect().height)).join(" ") + " page " + Math.round(document.querySelector(".snd").scrollHeight) + "/" + Math.round(document.querySelector("#main").clientHeight)); }, hold },
+			go("seq"),
+			{ say: "the GEN bar", act: async () => { await sleep(800); shot("gen-md"); Journey.snapshot("gen-md"); }, hold },
+			{ say: "done", act: () => shot("done") }] };
 	const shotsImport = { name: "md-shots-import", needs: () => !/md-shots/.test(location.search) ? "screenshots only when asked by name" : syxImportJ.needs(),
 		steps: [
 			openKits,
@@ -1151,7 +1158,7 @@ const MdJourneys = (() => {
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
 		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ,
-		syxImportMute, globalReset, shotsGlobal, shots, shotsSong, shotsImport, editorMenuJ, shotsMenu,
+		syxImportMute, globalReset, shotsGlobal, shotsSound, shots, shotsSong, shotsImport, editorMenuJ, shotsMenu,
 		dropSyxJ, dropSampleJ];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */

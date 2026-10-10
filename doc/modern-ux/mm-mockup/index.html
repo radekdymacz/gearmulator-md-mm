@@ -2049,6 +2049,15 @@ img,svg,canvas{-webkit-user-drag:none}
    key), the MUTATE bar over the Sound pages. The roll gives the bar's extra height; the lock lane's top border
    is the line the rail's LOCK PARAMETER block starts on. ===== */
 :root{--genband:58px}
+/* The GEN bar (Sequence) and the MUTATE bar (Sound), both editors (DESIGN-generators.md §5; the bars' markup:
+   deskGenBar.js). The GEN bar is the one bar under the step grid or the piano roll: GEN, a divider, the step
+   gestures behind a small ? key, then PAGE (its LEDs, ALL, FOL) at the far right; the MUTATE bar takes the rest of
+   the Sound head's row. Left to right: a title with its target (Alt: all, in the LED's colour), groups (a title on a
+   thin rule over their controls: LED radio rows, LCD value windows with the label inside, drag / wheel / arrows), a
+   muted summary, then the keys: small square caps with the keyboard key on them and a tiny label over them, in the
+   groups' title row (Random cream). Under 1400 px the hints go and the gaps narrow; the summary shrinks to what
+   fits. Each page's stylesheet takes this file in at its marker (sync-mdstudio-skin.py, the MM mockup's build.sh),
+   so the cascade is as it was; what only one editor has stays in its own stylesheet. */
 .genbar{display:flex;align-items:flex-end;gap:14px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;position:relative;flex:none;white-space:nowrap}
 .genbar>.genband{flex:1 1 auto;align-self:stretch;height:auto;margin:0;padding:0;background:none;border-radius:0}
 .gdiv{align-self:stretch;width:1px;flex:none;background:var(--rule)}
@@ -2117,39 +2126,64 @@ img,svg,canvas{-webkit-user-drag:none}
 #main>.mutband{margin:0 0 12px;flex:none}
 .ws-sound #main>.mutband .gbc .seg{gap:9px}
 /* the MM's bar holds NOTES too: under 1380 px the title loses its target (the rail shows the track) and the windows narrow */
-@media (max-width:1380px){.genbar .gbt span{display:none}.genbar .gbt{min-width:0}.genbar .gv{min-width:44px;padding:0 5px}.genbar .gbc .seg{gap:5px}.genbar .gbc .seg button{letter-spacing:.04em}.genbar .gbl{letter-spacing:.1em}}
+/* the MM's GEN bar holds NOTES and the roll's Draw keys too, so R and Defaults would fall off its end at 1440 px: up
+   to 1520 px the windows and gaps narrow (the Machinedrum Editor's bar does so under 1340 px); under 1380 px the
+   title loses its target (the rail shows the track) */
+@media (max-width:1520px){.genbar>.genband{gap:7px}.genbar{gap:8px}.genbar .gbt{min-width:0}.genbar .gbc{gap:4px}.genbar .gv{min-width:44px;padding:0 5px}.genbar .gbc .seg{gap:5px;margin-right:0}.genbar .gbc .seg button{letter-spacing:.03em}.genbar .gkeys{gap:5px}}
+@media (max-width:1380px){.genbar .gbt span{display:none}.genbar .gbc .seg{gap:5px}.genbar .gbc .seg button{letter-spacing:.04em}.genbar .gbl{letter-spacing:.1em}}
 /* the rail's spec tags: the machine's name comes first, the tag takes what is left (gone under 1380 px) */
 .th .nm:has(.gtag) b{flex:none}
 .th .nm .gtag{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:1380px){.th .nm .gtag{display:none}}
-/* ===== Sound by function (MM-PORT-PLAN e; 90-sound.js renderSound): the track's sound in small groups, the
-   Machinedrum Editor's section look (a title on a rule, the page's word at its right, no frame). The page is one
-   grid; each row of groups takes three of its lines (titles, screens, boxes) through subgrid, so a row's titles,
-   screens and boxes are level and every screen on the page is as tall (the screen lines share the free height,
-   up to --plotmax). Two groups without a screen share a column: the upper one's boxes at the screens' top, the
-   lower one's title at their foot; a lone one says what its knobs do there. A row without screens is two lines. */
+/* ===== Sound by function (MM-PORT-PLAN e; 90-sound.js renderSound): the Machinedrum Editor's page and layout
+   (shared/deskSound.css, shared/deskSoundLayout.js), with what the Monomachine's has more: the head's three keys to
+   the Sequence dock, 28 px boxes, three LFOs a row (each a route line, eleven shapes and four boxes under its
+   screen). The LFO row's box lines are taller by --lfox, so it starts that much taller (flex basis) and every
+   screen on the page stays as tall. ===== */
+/* Sound, both editors (the markup: deskSoundLayout.js soundRow): the track's sound in small groups, in the page's
+   section look: a title on a rule, the machine's page at its right, no frame. Each row is one grid of three lines
+   (titles, screens, boxes) its columns share (subgrid), so a row's titles, screens and boxes are level. Two groups
+   without a screen share a column: the upper one's boxes at the screens' top, the lower one's title at their foot
+   and its boxes on the box line; a lone one says what its knobs do in the screen's place. The rows with screens
+   share the free height evenly, so every screen on the page is as tall; a row without screens is two lines. A
+   group's width follows its box count. Each screen's help is its tooltip. A page sets --sgbox (the box line, 34px)
+   and --sgmax (a row's most, 420px) where its boxes differ. Each page's stylesheet takes this file in at its marker
+   (as deskGenBar.css). */
 #main>.snd{flex:1 1 auto;min-height:0}
-.snd{--plotmax:230px;--sndgap:9px;display:grid;grid-template-columns:minmax(0,1fr);row-gap:6px;align-content:start;min-height:0;min-width:0}
-.sndhead{grid-row:1;display:flex;align-items:center;gap:16px;min-width:0;margin-bottom:4px}
+.snd{display:flex;flex-direction:column;gap:16px;min-height:0}
+.sndhead{display:flex;align-items:center;gap:22px;min-width:0}
+.sgrow{flex:1 1 0;min-height:0;max-height:var(--sgmax,420px);display:grid;grid-template-rows:auto minmax(0,1fr) var(--sgbox,34px);column-gap:14px;row-gap:7px;min-width:0}
+.sgrow.flat{flex:none;grid-template-rows:auto var(--sgbox,34px)}
+/* a column takes its row's three lines (subgrid); an engine without subgrid (macOS 12, Safari 15) skips that and
+   keeps the same three lines of its own: one-line titles and one box line, so they are level all the same */
+.sgcol{grid-row:1/-1;display:grid;grid-template-rows:auto minmax(0,1fr) var(--sgbox,34px);grid-template-rows:subgrid;row-gap:7px;min-width:0}
+.sgrow.flat>.sgcol{grid-template-rows:auto var(--sgbox,34px);grid-template-rows:subgrid}
+.sg{display:contents}
+.sg>*{grid-column:1}
+.sg>header{grid-row:1;border-top:2px solid var(--print);padding-top:7px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
+.sg h3{margin:0;font:600 12px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sg>header>span{font:12px var(--mono);color:var(--print3);white-space:nowrap;cursor:help}
+.sg>.plot{grid-row:2;position:relative;min-height:0;border-radius:4px;overflow:hidden}
+.sg>:is(.ctl,.sgline,.sgsel,.sgabout){grid-row:3;align-self:start;min-width:0}
+.sgrow.flat .sg>:is(.ctl,.sgline,.sgsel,.sgabout){grid-row:2}
+/* two groups in one column: the upper one's boxes at the screens' top, the lower one's title at their foot */
+.sgcol.stack>.sg:first-child>:not(header){grid-row:2;align-self:start}
+.sgcol.stack>.sg:last-child>header{grid-row:2;align-self:end}
+/* a lone group: what its knobs do where the screen would be */
+.sgnote{grid-row:2;margin:0;align-self:start;font:12px var(--mono);line-height:1.5;color:var(--print3);overflow:hidden;min-height:0}
+.snd{--sgbox:28px;--lfox:61px}
+.snd .sgrow.lforow{--sgbox:auto;flex-basis:var(--lfox);max-height:calc(420px + var(--lfox))}
+.sg>*{min-width:0}
+.sg h3{display:flex;align-items:center;gap:8px}
+.sg>header>span{flex:none}
+.sg>.lfobody{grid-row:3;align-self:start;min-width:0}
+.sgrow.flat .sg>.lfobody{grid-row:2}
 .sndhead>.machbtn{flex:none;width:auto!important;grid-template-columns:auto auto 10px!important;max-width:220px}
 .sndhead>.lcdchip{flex:none}
 .sndhead>.mutband{flex:1 1 auto;margin:0!important;min-width:0}
 .snddock{display:flex;flex-direction:column;gap:3px;flex:none}
 .snddock .ptog{height:17px;padding:0 8px;font-size:10px;letter-spacing:.1em;justify-content:flex-start;border:1px solid var(--rule);border-radius:2px}
-.sgrow{grid-column:1;display:grid;grid-template-rows:subgrid;column-gap:14px;min-width:0;min-height:0}
-.snd .sgcol{grid-row:1/-1;display:grid;grid-template-rows:subgrid;gap:normal;min-width:0;min-height:0}
-.sg{display:contents}
-.sg>*{grid-column:1;min-width:0}
-.sg>header{grid-row:1;border-top:2px solid var(--print);padding-top:6px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
-.sg h3{margin:0;font:600 12px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;display:flex;align-items:center;gap:8px}
-.sg>header>span{font:11px var(--mono);color:var(--print3);white-space:nowrap;cursor:help;flex:none}
-.sg>.plot{grid-row:2;position:relative;min-height:0;border-radius:4px;overflow:hidden}
 .sg>.plot>canvas.ed{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
-.sg>:is(.ctl,.sgline,.lfobody,.sgabout){grid-row:3;align-self:start;min-width:0}
-.sgrow.flat .sg>:is(.ctl,.sgline,.lfobody,.sgabout){grid-row:2}
-.sgcol.stack>.sg:first-child>:not(header){grid-row:2;align-self:start}
-.sgcol.stack>.sg:last-child>header{grid-row:2;align-self:end}
-.sgnote{grid-row:2;margin:0;align-self:start;font:11px var(--mono);line-height:1.45;color:var(--print3);overflow:hidden;min-height:0}
 .sgabout{margin:0;font:12px var(--mono);line-height:1.5;color:var(--print3)}
 .sgabout .cream{margin-left:8px}
 .sg>.ctl{gap:4px}
@@ -2653,6 +2687,87 @@ function genNotes(spec, hits, seed, t = 0) {
 		return [s, sc[i]];
 	});
 }
+"use strict";
+/* The GEN bar (Sequence) and the MUTATE bar (Sound), both editors (DESIGN-generators.md §5; the look:
+   deskGenBar.css): the bars' pieces as markup, and their clicks, keys and wheel. Each page builds its bars from
+   these pieces (mdDeskGenUi.js; the MM mockup's 76-gen.js) and keeps what is its machine's: the specs, the run, the
+   trial, what a change writes. The handlers call the page's functions by name, at the event, so the page defines
+   them: genDefaults(), randomise(all), genKind(kind), genMode(mode), genVal(key, d) and, for a scope chip,
+   S.mut.scope (a Set, replaced per change), renderMutStrip(), mutLive(). A value's drag is each page's own (the MD
+   holds it in its one gesture slot, Held). */
+
+/* a group: a title on a thin rule over its controls */
+const gbg = (label, body, cls = "", tip = "") => `<div class="gbg ${cls}"${tip ? ` title="${tip}"` : ""}><span class="gbl">${label}</span><div class="gbc">${body}</div></div>`;
+/* a value: an LCD window, its label inside (drag up or down, wheel, arrows, click) */
+const gv = (k, label, v, tip) => `<span class="gv" data-gv="${k}" role="spinbutton" tabindex="0" aria-label="${label}" aria-valuenow="${parseInt(v) || 0}" title="${tip}. Drag up or down, scroll, or click (⇧-click: down)."><small>${label}</small><b>${v}</b></span>`;
+/* a key of a bar: a small square cap with its key on it (the keyboard shortcut too) and a tiny label over it */
+const kc = (attr, act, cap, label, tip, off = false, cls = "", on = null) => `<button class="kc ${cls}${on ? " on" : ""}" ${attr}="${act}" ${off ? "disabled" : ""}${on != null ? ` aria-pressed="${on}"` : ""} title="${tip}" aria-label="${label}"><small>${label}</small><kbd>${cap}</kbd></button>`;
+/* the bars' one randomise key: R, with its "all" chord over it */
+const randKey = tip => `<button class="kc cream krand" data-rand="1" title="${tip}" aria-label="Randomise"><small>Random <em>⌥R all</em></small><kbd>R</kbd></button>`;
+/* the bar's title and what it acts on (Alt: all, in the LED's colour) */
+const gtitle = (name, target, all, tip) => `<div class="gbt" title="${tip}"><b>${name}</b><span class="${all ? "all" : ""}">${target}</span></div>`;
+/* an LED radio row: items [[key, words]], tips {key: tip} */
+const gseg = (attr, cur, items, tips) => `<span class="seg">${items.map(([k, n]) => `<button ${attr}="${k}" aria-pressed="${cur === k}" title="${tips[k]}">${n}</button>`).join("")}</span>`;
+
+/* the bars' clicks: Defaults, the R key (⌥ or FN: every track; ⌘ is not "all", DESIGN-keymap.md P3), MODE, WRITE,
+   a value (click: up, ⇧-click: down; not after its drag), a scope chip or a group's title (MUTATE's scope) */
+document.addEventListener("click", e => {
+	const g = e.target.closest("[data-gen]"); if (g && !g.disabled) { if (g.dataset.gen === "fill") genDefaults(); return; }
+	const rk = e.target.closest("[data-rand]"); if (rk && !rk.disabled) { randomise(e.altKey); return; }
+	const k = e.target.closest("[data-genkind]"); if (k) { genKind(k.dataset.genkind); return; }
+	const md = e.target.closest("[data-genmode]"); if (md) { genMode(md.dataset.genmode); return; }
+	const v = e.target.closest(".gv[data-gv]"); if (v && !v.dataset.dragged) { genVal(v.dataset.gv, e.shiftKey ? -1 : 1); return; }
+	const c = e.target.closest("[data-mutg],[data-mutsg]"); if (c) {
+		const id = c.dataset.mutg || c.dataset.mutsg, scope = new Set(S.mut.scope); scope.has(id) ? scope.delete(id) : scope.add(id); S.mut.scope = scope;
+		renderMutStrip(); mutLive(); e.stopPropagation();
+	}
+}, true);
+/* a focused value: the arrows move it (⇧: by 10), and it keeps the focus across the bar's redraw */
+document.addEventListener("keydown", e => {
+	const v = e.target.closest?.(".gv[data-gv]"); if (!v) return; const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (d == null) return;
+	e.preventDefault(); e.stopPropagation(); const k = v.dataset.gv; genVal(k, d * (e.shiftKey ? 10 : 1)); document.querySelector(`.gv[data-gv="${k}"]`)?.focus();
+}, true);
+/* the wheel over a value (⇧: by 10) */
+document.addEventListener("wheel", e => { const v = e.target.closest?.(".gv[data-gv]"); if (!v) return; e.preventDefault(); genVal(v.dataset.gv, ((e.deltaY || e.deltaX) < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1)); }, { passive: false });
+/* how much a dragged value moves a notch: the percentages two */
+const gvDragStep = k => k === "dens" || k === "amt" || k === "racc" ? 2 : 1;
+"use strict";
+/* The Sound page's rows, both editors (the look: deskSound.css). A row is a grid of columns over three lines
+   (titles, screens, boxes). A group with a screen (x.plot) is a column of its own, as wide as its boxes but never
+   narrower than about two of them; the groups without a screen pair up in one column (the upper one's boxes at the
+   screens' top, the lower one's title at their foot); a lone one says what its knobs do where the screen would be.
+   A row without any screen is two lines, its groups side by side (list.about: a note in a column after them).
+   Pure: each page says how to draw a group and what its machine needs (mdDeskSound.js; the MM mockup's 90-sound.js).
+     o.group(x, cols, first, note)  a group's markup: cols its box columns, first true for the first group of its
+                                    page in the row (the page's word goes there), note what a lone group says
+     o.page(x)    the group's page (first changes with it)       o.count(x)  its boxes (x.n wins)
+     o.narrow     [over, w, w2]: a screen's least width in boxes, w when the row holds more than `over` boxes, else w2
+     o.min        a column's least width ("min-content" or "0")  o.edWidth   {editor: width} for a wide screen
+     o.lone(x)    what a lone group says */
+function soundRow(list, cls, o) {
+	if (!list.length) return "";
+	let prev = null;
+	const first = x => { const p = o.page(x); if (prev === p) return false; prev = p; return true; };
+	const n = x => x.n ?? o.count(x);
+	const narrow = list.reduce((a, x) => a + n(x), 0) > o.narrow[0] ? o.narrow[1] : o.narrow[2];
+	const w = x => x.w ?? (o.edWidth && o.edWidth[x.ed]) ?? (x.plot ? Math.max(n(x), narrow) : n(x));
+	const tracks = cols => `grid-template-columns:${cols.map(c => `minmax(${o.min},${c}fr)`).join(" ")}`;
+	if (!list.some(x => x.plot)) {
+		const ws = list.map(x => Math.max(1.4, w(x)));
+		return `<div class="sgrow flat ${cls}" style="${tracks(list.about ? [...ws, 4] : ws)}">${list.map(x => `<div class="sgcol">${o.group(x, n(x), first(x), "")}</div>`).join("")}${list.about ? `<p class="sgabout">${list.about}</p>` : ""}</div>`;
+	}
+	const cols = [], stacks = [];
+	for (const x of list) {
+		if (x.plot) { cols.push([x]); continue; }
+		const s = stacks[stacks.length - 1];
+		if (s && s.length < 2) s.push(x); else { const c = [x]; stacks.push(c); cols.push(c); }
+	}
+	return `<div class="sgrow ${cls}" style="${tracks(cols.map(c => Math.max(...c.map(w))))}">${cols.map(c => {
+		const cn = Math.max(...c.map(n)), kind = c[0].plot ? "" : c.length > 1 ? " stack" : " lone";
+		return `<div class="sgcol${kind}">${c.map(x => o.group(x, cn, first(x), kind === " lone" ? o.lone(x) : "")).join("")}</div>`;
+	}).join("")}</div>`;
+}
+if (typeof module !== "undefined") module.exports = { soundRow };
 /* ===== GEN and MUTATE, the Monomachine's own (MM-PORT-PLAN.md d) =====
    Pure: values in, values out, nothing of the page. The generators without a machine in them (euclid, random,
    the seeds, genFit, genRunFor, mutPull, genNotes) are skins/shared/deskGen.js, both editors' one module,
@@ -5128,14 +5243,8 @@ function genVal(k,d){const lim=(v,a,b)=>Math.max(a,Math.min(b,v));
   if(k==="nscale")n.scale=genCycle(MM_SCALES,n.scale,d);
   if(k==="nrange"){n.range=lim(n.range+(d>0?1:-1),1,2);n.root=Math.min(n.root,127-12*n.range)}}
  genLive()}
-/* The bars' pieces (the Machinedrum Editor's): a group (a title on a thin rule over its controls), a value (an LCD
-   window, its label inside), a key (a small square cap with its keyboard key on it and a tiny label over it). */
-const gbg=(label,body,cls="",tip="")=>`<div class="gbg ${cls}"${tip?` title="${tip}"`:""}><span class="gbl">${label}</span><div class="gbc">${body}</div></div>`;
-const gv=(k,label,v,tip)=>`<span class="gv" data-gv="${k}" role="spinbutton" tabindex="0" aria-label="${label}" aria-valuenow="${parseInt(v)||0}" title="${tip}. Drag up or down, scroll, or click (⇧-click: down)."><small>${label}</small><b>${v}</b></span>`;
-const gkc=(attr,act,cap,label,tip)=>`<button class="kc" ${attr}="${act}" title="${tip}" aria-label="${label}"><small>${label}</small><kbd>${cap}</kbd></button>`;
-const randKey=tip=>`<button class="kc cream krand" data-rand="1" title="${tip}" aria-label="Randomise"><small>Random <em>⌥R all</em></small><kbd>R</kbd></button>`;
-const gtitle=(name,target,all,tip)=>`<div class="gbt" title="${tip}"><b>${name}</b><span class="${all?"all":""}">${target}</span></div>`;
-const gseg=(attr,cur,items,tips)=>`<span class="seg">${items.map(([k,n])=>`<button ${attr}="${k}" aria-pressed="${cur===k}" title="${tips[k]}">${n}</button>`).join("")}</span>`;
+/* The bars' pieces (gbg, gv, kc, randKey, gtitle, gseg) and their clicks, wheel and arrows: shared/deskGenBar.js,
+   the Machinedrum Editor's. */
 function genNotesHtml(sp,t){const n=sp.notes;if(!n||sp.kind==="keep"||isMidiT(t))return"";const kit=n.motion==="kit"||trk(t).m==="DPRO-BBOX";
  const mot=gv("nmot","Notes",n.motion==="off"?"off":n.motion,kit?"Off: the steps keep their drums (a new one takes the last). KIT: each hit picks BD1, SD1, CH or OH":"Off: the steps keep their pitch (a new one takes the track's last note). STEP: a walk of 1 or 2 scale degrees from the root. LEAP: any note of the range");
  const seed=sp.kind==="euclid"&&n.motion!=="off"?gv("seed","Seed",sp.seed,"The same seed gives the same notes"):"";
@@ -5157,7 +5266,7 @@ function genStripHtml(){const t=S.sel,tr=trk(t),sp=genSpec(t),all=S.alt,[from,to
  return`${gtitle("Gen",target,all,"Generators: every change writes to the pattern at once. A run of changes on this track is one undo step; Undo takes it back in one step. Alt: every track of the side shown, the whole pattern.")}
   ${mode}${params}${genNotesHtml(sp,t)}
   <div class="gsum" title="${run&&run.applied?"What the run changed, against the pattern before it":"What a change writes"}">${sum}</div>
-  <div class="gkeys">${randKey(all?"Randomise every track of the side: a new variation of each spec, the whole pattern (Alt+R)":`Randomise ${tLabel(t)}: a new variation, ${sp.kind==="random"?"a new seed":sp.kind==="euclid"?"random hits and rotation in the cycle, a new seed for the notes":"nothing while it is set to Keep"} (R). Alt+R or Alt-click: every track`)}${gkc("data-gen","fill","↺","Defaults","Defaults: every track's spec from its machine: a bass 5/16 with a walk in its scale, a lead random 30 % over two octaves, a pad on 1 and 3, the drum box 8/16 on BD SD CH OH; FX machines kept; MIDI tracks 4/16, rhythm only. Writes this track (Alt: every track)")}</div>`}
+  <div class="gkeys">${randKey(all?"Randomise every track of the side: a new variation of each spec, the whole pattern (Alt+R)":`Randomise ${tLabel(t)}: a new variation, ${sp.kind==="random"?"a new seed":sp.kind==="euclid"?"random hits and rotation in the cycle, a new seed for the notes":"nothing while it is set to Keep"} (R). Alt+R or Alt-click: every track`)}${kc("data-gen","fill","↺","Defaults","Defaults: every track's spec from its machine: a bass 5/16 with a walk in its scale, a lead random 30 % over two octaves, a pad on 1 and 3, the drum box 8/16 on BD SD CH OH; FX machines kept; MIDI tracks 4/16, rhythm only. Writes this track (Alt: every track)")}</div>`}
 /* the step gestures behind a small ? key (a click: the list of keys) */
 function stepLegend(){const midi=isMidiT(S.sel),row=(cls,what,how)=>`<span>${cls!=null?`<i class="lg on ${cls}"></i>`:`<i class="lg none"></i>`}<b>${what}</b>${how}</span>`;
  return`<span class="steplegend"><button class="glegkey" id="steplegend" aria-label="Step gestures" aria-describedby="steplegpop">?</button><span class="legend glegpop" id="steplegpop" role="tooltip">${row("","Note","click in the roll; drag up or down for pitch, sideways to paint (alt: erase)")}${midi?"":row("g","Trigless","no envelope trigs (the ENV row)")}${row("y","Note off","alt-click an empty step")}${row("lk","Has locks","a lock on the step")}${row(null,"Fill","⌘-click: every 2nd step from there to the end gets the note (from a note: off); ⌘⇧-click: every 4th")}<small>? the list of keys</small></span></span>`}
@@ -5205,30 +5314,23 @@ function mutStripHtml(){const t=S.sel,all=S.alt,tr=S.mut.trial&&S.mut.trial.key=
   ${gbg("Scope",`<span class="seg">${chips}</span>${(n=>`<span class="ghint">${n?`+ ${n} group${n===1?"":"s"}`:"+ a group's title"}</span>`)([...S.mut.scope].filter(x=>x.includes(":")).length)}`,"gscope","The DATA pages Mutate moves; click a group's title below to add that group")}
   <div class="gsum" title="${S.mut.note}">${S.mut.note||(midi?"A MIDI track has no sound to move: Alt+R moves every synth track.":"")}</div>
   <div class="gkeys">${randKey(`${all?"Randomise every synth track":`Randomise ${tLabel(t)}`}: a fresh random sound, from the sound before the trial${tr?"":" (this sound)"}. One trial is one undo step (R; Alt+R or Alt-click: every synth track)`)}</div>`}
-function mutBarHtml(){return`<div class="genband mutband" id="mutband">${mutStripHtml()}</div>`}
+function mutBarHtml(){return`<div class="genband mutband" id="mutband" title="The groups follow the sound's path: synthesis and amp, filter and effects, then the three LFOs. Drag a dot or a box; hold Alt to move the same knob on every synth track (Control All).">${mutStripHtml()}</div>`}
 function renderMutStrip(){const host=$("#mutband");if(host)host.innerHTML=mutStripHtml();$$("[data-mutsg]").forEach(b=>b.setAttribute("aria-pressed",S.mut.scope.has(b.dataset.mutsg)))}
 
-/* ---- the bars' clicks, values (drag, wheel, arrows) and keys ---- */
-document.addEventListener("click",e=>{
- const g=e.target.closest("[data-gen]");if(g&&!g.disabled){if(g.dataset.gen==="fill")genDefaults();return}
- const rk=e.target.closest("[data-rand]");if(rk&&!rk.disabled){randomise(e.altKey||e.metaKey||e.ctrlKey);return}
- const k=e.target.closest("[data-genkind]");if(k){genKind(k.dataset.genkind);return}
- const md=e.target.closest("[data-genmode]");if(md){const sp=genSpec();if(sp.mode!==md.dataset.genmode){sp.mode=md.dataset.genmode;genEdited();genLive()}return}
- const v=e.target.closest(".gv[data-gv]");if(v&&!v.dataset.dragged){genVal(v.dataset.gv,e.shiftKey?-1:1);return}
- const c=e.target.closest("[data-mutg],[data-mutsg]");if(c){const id=c.dataset.mutg||c.dataset.mutsg;S.mut.scope.has(id)?S.mut.scope.delete(id):S.mut.scope.add(id);renderMutStrip();mutLive();e.stopPropagation();return}
- if(e.target.closest("#steplegend")){toggleKeys(true);e.stopPropagation()}},true);
+/* ---- the bars' clicks, values and keys: shared/deskGenBar.js (genMode below is the Write group's); here the
+   step legend's ? key and a value's drag ---- */
+/* the Write mode of a random spec (Replace, Add, Thin) */
+function genMode(mode){const sp=genSpec();if(sp.mode===mode)return;sp.mode=mode;genEdited();genLive()}
+document.addEventListener("click",e=>{if(e.target.closest("#steplegend")){toggleKeys(true);e.stopPropagation()}},true);
 let gvDrag=null;
 document.addEventListener("pointerdown",e=>{const v=e.target.closest(".gv[data-gv]");if(!v||e.button!==0)return;gvDrag={v,y:e.clientY,k:v.dataset.gv,acc:0};delete v.dataset.dragged;try{v.setPointerCapture(e.pointerId)}catch(_){}});
 document.addEventListener("pointermove",e=>{if(!gvDrag)return;const d=Math.trunc((gvDrag.y-e.clientY)/6)-gvDrag.acc;if(!d)return;
- gvDrag.acc+=d;gvDrag.v.dataset.dragged="1";genVal(gvDrag.k,d*(gvDrag.k==="dens"||gvDrag.k==="amt"?2:1));
+ gvDrag.acc+=d;gvDrag.v.dataset.dragged="1";genVal(gvDrag.k,d*gvDragStep(gvDrag.k));
  const n=document.querySelector(`.gv[data-gv="${gvDrag.k}"]`);if(n){n.dataset.dragged="1";gvDrag.v=n}});
 document.addEventListener("pointerup",()=>{if(!gvDrag)return;const k=gvDrag.k;gvDrag=null;setTimeout(()=>{const n=document.querySelector(`.gv[data-gv="${k}"]`);if(n)delete n.dataset.dragged},0)});
-document.addEventListener("wheel",e=>{const v=e.target.closest?.(".gv[data-gv]");if(!v)return;e.preventDefault();genVal(v.dataset.gv,((e.deltaY||e.deltaX)<0?1:-1)*(e.shiftKey?10:1))},{passive:false});
-document.addEventListener("keydown",e=>{const v=e.target.closest?.(".gv[data-gv]");if(!v)return;const d={ArrowUp:1,ArrowRight:1,ArrowDown:-1,ArrowLeft:-1}[e.key];if(d==null)return;
- e.preventDefault();e.stopPropagation();const k=v.dataset.gv;genVal(k,d*(e.shiftKey?10:1));document.querySelector(`.gv[data-gv="${k}"]`)?.focus()},true);
-Keys.bind({id:"randomise-track",scope:"any",keys:["R"],code:"KeyR",group:"Selected track",when:kbOn,run:()=>randomise(false),
+Keys.bind({id:"randomise-track",short:"Randomise",scope:"any",keys:["R"],code:"KeyR",group:"Selected track",when:kbOn,run:()=>randomise(false),
  does:"Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation: a new seed, or random hits and rotation"});
-Keys.bind({id:"randomise-all",scope:"any",keys:["R"],code:"KeyR",mod:"alt",group:"All",when:kbOn,run:()=>randomise(true),
+Keys.bind({id:"randomise-all",short:"Randomise all",scope:"any",keys:["R"],code:"KeyR",mod:"alt",group:"All",when:kbOn,run:()=>randomise(true),
  does:"Randomise every track: on Sound every synth track's sound, everywhere else every GEN spec of the side shown over the whole pattern"});
 Keys.bind({id:"gen-value-all",scope:"seq",area:"GEN bar",keys:["GEN value"],mod:"alt",group:"All",does:"Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)"});
 Keys.bind({id:"rkey-all",scope:"any",area:"GEN bar",keys:["R key"],mod:"alt",group:"All",does:"Click: randomise every track (Sound: every synth track; VOL and TUNE stay)"});
@@ -5604,7 +5706,7 @@ const MM_FIXED_TAB={
  AMP:[SGM("Envelope","ATK HOLD DEC REL","amp"),SGM("Drive","DIST","dist"),SGM("Level · pan","VOL PAN","pan"),SGM("Glide","PORT",null,"PORT: the slide from the note before (KIT › TRIG says when).")],
  FLT:[SGM("Filter","BASE WDTH HPQ LPQ","flt"),SGM("Filter env","ATK DEC BOFS WOFS","fenv")],
  EFX:[SGM("EQ","EQF EQG","eq"),SGM("Sample rate","SRR","srr",null,2),SGM("Delay","DTIM DSND DFB","delay"),SGM("Delay filter","DBAS DWID","dflt")]};
-const MM_PG_WORD={SYN:"SYN",AMP:"AMP",FLT:"FILTER",EFX:"EFFECTS"};
+const MM_PG_WORD={SYN:"synth",AMP:"amp",FLT:"filter",EFX:"effects",MID:"midi"};
 const sgKey=t=>t.toLowerCase().replace(/[^a-z0-9]+/g,"-");
 /* one page's groups: the table's names resolved to slots, the knobs it leaves out in a group of their own */
 function mmPageGroups(pg,names,table){const out=[],used=new Set();
@@ -5831,28 +5933,16 @@ function sgTitle(x){if(x.titleHtml)return x.titleHtml;if(x.mut===false)return x.
  return`<button class="mutg" data-mutsg="${id}" aria-pressed="${S.mut.scope.has(id)}" title="Add ${attrS(x.title)} to what Mutate moves">${x.title}</button>`}
 const MM_PG_TIP={SYN:"the machine's SYNTHESIS page",AMP:"the AMPLIFICATION page",FLT:"the FILTER page",EFX:"the EFFECTS page",LF1:"LFO 1's page",LF2:"LFO 2's page",LF3:"LFO 3's page",MID:"the MIDI track's page"};
 /* a group: its title on the rule (the page's word on the first group of that page in its row), its screen
-   or what its knobs do, its boxes; each part is a cell of the row's grid (subgrid) */
+   or what its knobs do, its boxes; each part is a cell of the row's grid */
 function sgHtml(x,cols,tag,note){const t=S.sel;
  const body=x.body||`<div class="ctl" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${x.idx.map((i,k)=>pc(x.pg,i,{t,label:x.labels?.[k]||x.knobs[k]})).join("")}</div>`;
  return`<section class="sg" data-sg="${x.pg}:${x.key}"><header><h3>${sgTitle(x)}</h3>${tag?`<span title="Its knobs are on ${MM_PG_TIP[x.pg]||x.pg}">${tag}</span>`:""}</header>${x.plot||(note?`<p class="sgnote" title="${attrS(note)}">${note}</p>`:"")}${body}</section>`}
-/* One row: columns over three lines (titles, screens, boxes) on the page's grid, at the page's grid lines
-   (line0), so every row's screens are as tall. A group with a screen is a column of its own, as wide as its
-   boxes (never narrower than about two); two without a screen share a column (the upper one's boxes at the
-   screens' top, the lower one's title at their foot); a lone one says what its knobs do there. A row
-   without screens is two lines. */
-function sgRow(list,cls,line0){if(!list.length)return"";
- let prev="";const first=x=>{const w=x.tag??MM_PG_WORD[x.pg]??"";if(prev===x.pg)return"";prev=x.pg;return w},n=x=>x.n??x.idx.length;
- const total=list.reduce((a,x)=>a+n(x),0),narrow=total>12?1.8:2.4,w=x=>x.w??(x.plot?Math.max(n(x),narrow):n(x));
- const tracks=cols=>`grid-template-columns:${cols.map(c=>`minmax(0,${c}fr)`).join(" ")}`;
- if(!list.some(x=>x.plot))return`<div class="sgrow flat ${cls}" style="grid-row:${line0}/span 2;${tracks(list.map(x=>Math.max(1.4,w(x))))}">${list.map(x=>`<div class="sgcol">${sgHtml(x,n(x),first(x))}</div>`).join("")}</div>`;
- const cols=[],stacks=[];
- for(const x of list){if(x.plot){cols.push([x]);continue}const s=stacks[stacks.length-1];if(s&&s.length<2)s.push(x);else{const c=[x];stacks.push(c);cols.push(c)}}
- return`<div class="sgrow ${cls}" style="grid-row:${line0}/span 3;${tracks(cols.map(c=>Math.max(...c.map(w))))}">${cols.map(c=>{const cn=Math.max(...c.map(n)),kind=c[0].plot?"":c.length>1?" stack":" lone";
-  return`<div class="sgcol${kind}">${c.map(x=>sgHtml(x,cn,first(x),kind===" lone"?x.note:"")).join("")}</div>`}).join("")}</div>`}
-/* the rows of a page: [[groups], cls]... -> the page's grid template and the rows at their lines */
-function sndRows(rows){let line=2,tpl=["auto"];const html=rows.map(([list,cls])=>{if(!list.length)return"";const flat=!list.some(x=>x.plot);
-  if(line>2){tpl.push("var(--sndgap)");line++}const h=sgRow(list,cls,line);tpl.push(...(flat?["auto","auto"]:["auto","minmax(0,var(--plotmax))","auto"]));line+=flat?2:3;return h}).join("");
- return{tpl:tpl.join(" "),html}}
+/* One row (shared/deskSoundLayout.js soundRow, as the Machinedrum Editor's): a group with a screen is a column of its
+   own, the ones without pair up; a lone one says what its knobs do. The page's word on the first group of a page in
+   the row (a group's own tag wins: an LFO that is off says so). */
+const SND_ROW={page:x=>x.pg,count:x=>x.idx.length,narrow:[12,1.8,2.4],min:"0",lone:x=>x.note,
+ group:(x,cols,first,note)=>sgHtml(x,cols,first?(x.tag??MM_PG_WORD[x.pg]??""):"",note)};
+const sgRow=(list,cls)=>soundRow(list,cls,SND_ROW);
 /* an LFO group: the ~ key and its title, its screen, then PAGE › DEST and TRIG, the eleven shapes, the four boxes */
 function lfoGroup(t,k){const l="LF"+k,v=trk(t).v[l],dn=LPAGES[v[0]]?destNames(t,v[0]):["—"];
  return{key:"lfo",title:"LFO "+k,pg:l,idx:[4,5,6,7],knobs:[4,5,6,7].map(i=>FIXED[l][i]),n:4,w:4,tag:v[7]?"":"off",
@@ -5868,7 +5958,7 @@ function sndDockKeys(t){const midi=isMidiT(t);return`<span class="snddock" title
 function renderSound(){const t=S.sel,tr=trk(t);let rows,head;
  if(isMidiT(t)){const int=S.tracks[t-6],G=(title,idx,labels,plain)=>({key:sgKey(title),title,pg:"MID",idx,knobs:idx.map(i=>FIXED.MID[i]),labels,mut:false,note:plain});
   const cc=[4,5,6,7].map(i=>"CC "+(tr.cc[i-4]===128?"AFT":tr.cc[i-4]));
-  rows=[[[G("Note",[0,1]),G("Bend · program",[2,3]),G("Controllers",[4,5,6,7],cc),{key:"ccnum",title:"CC numbers",pg:"cc",idx:[0,1,2,3],knobs:["CL1","CL2","CL3","CL4"],mut:false,tag:"GLOBAL"},
+  rows=[[[G("Note",[0,1]),G("Bend · program",[2,3]),G("Controllers",[4,5,6,7],cc),{key:"ccnum",title:"CC numbers",pg:"cc",idx:[0,1,2,3],knobs:["CL1","CL2","CL3","CL4"],mut:false,tag:"global"},
    {key:"lfos",title:"LFOs",pg:"MID",idx:[],knobs:[],n:0,w:4,mut:false,tag:"",body:`<p class="sgabout">MIDI track ${t-5} shares its three LFOs with synth track ${t-5} (${int.m}): an LFO set to PAGE MIDI moves this page. <button class="cream" data-goto="${t-6}">Open T${t-5} LFOs</button></p>`}],"midirow"]];
   head=`<span class="lcdchip" title="The MIDI track's page is stored in the kit; PCHG only sends when it is locked on a step">M${t-5} · CH ${String(tr.ch).padStart(2,"0")}</span>`}
  else{const g=mmSoundGroups(tr.m);
@@ -5876,8 +5966,7 @@ function renderSound(){const t=S.sel,tr=trk(t);let rows,head;
   const syn=g.SYN.length?g.SYN:[{key:"syn",title:"Synthesis",pg:"SYN",idx:[],knobs:[],n:0,w:3,mut:false,body:`<p class="sgabout">${MACH[tr.m].about}</p>`}];
   rows=[[[...syn,...g.AMP],"srcrow"],[[...g.FLT,...g.EFX],"tonerow"],[[1,2,3].map(k=>lfoGroup(t,k)),"lforow"]];
   head=machButton(tr.m)}
- const R=sndRows(rows);
- $("#main").innerHTML=`<div class="snd" style="grid-template-rows:${R.tpl}"><div class="sndhead">${head}${mutBarHtml()}${sndDockKeys(t)}</div>${R.html}</div>`;
+ $("#main").innerHTML=`<div class="snd mutating"><div class="sndhead">${head}${mutBarHtml()}${sndDockKeys(t)}</div>${rows.map(([list,cls])=>sgRow(list,cls)).join("")}</div>`;
  syncControls();redraw()}
 
 /* machine picker (MD Editor pattern) */

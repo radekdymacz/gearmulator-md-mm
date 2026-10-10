@@ -137,27 +137,17 @@ function genVal(k, d) {
 }
 /* the Write mode of a random spec (Replace, Add, Thin) */
 function genMode(mode) { const sp = genSpec(); if (sp.mode === mode) return; setGenSpec(S.sel, Object.assign({}, sp, { mode })); genLive(); }
-/* The bars' pieces: a group (a title on a thin rule over its controls), a value (an LCD window, its label inside),
-   a key hint. */
-const gbg = (label, body, cls = "", tip = "") => `<div class="gbg ${cls}"${tip ? ` title="${tip}"` : ""}><span class="gbl">${label}</span><div class="gbc">${body}</div></div>`;
-const gv = (k, label, v, tip) => `<span class="gv" data-gv="${k}" role="spinbutton" tabindex="0" aria-label="${label}" aria-valuenow="${parseInt(v) || 0}" title="${tip}. Drag up or down, scroll, or click (⇧-click: down)."><small>${label}</small><b>${v}</b></span>`;
-const kbd = k => `<kbd>${k}</kbd>`;
-/* a key of a bar: a small square cap with its key on it (the keyboard shortcut too) and a tiny label over it */
-const kc = (attr, act, cap, label, tip, off = false, cls = "", on = null) => `<button class="kc ${cls}${on ? " on" : ""}" ${attr}="${act}" ${off ? "disabled" : ""}${on != null ? ` aria-pressed="${on}"` : ""} title="${tip}" aria-label="${label}"><small>${label}</small><kbd>${cap}</kbd></button>`;
-/* the bars' one randomise key: R, with its "all" chord under it */
-const randKey = tip => `<button class="kc cream krand" data-rand="1" title="${tip}" aria-label="Randomise"><small>Random <em>⌥R all</em></small><kbd>R</kbd></button>`;
-const gtitle = (name, target, all, tip) => `<div class="gbt" title="${tip}"><b>${name}</b><span class="${all ? "all" : ""}">${target}</span></div>`;
+/* The bars' pieces (gbg, gv, kc, randKey, gtitle, gseg) and their clicks, keys and wheel: shared/deskGenBar.js. */
 function genStripHtml() {
 	const sp = genSpec(), t = S.sel, tr = V.tracks[t], all = S.alt, run = S.gen.run && S.gen.run.key === genKey() ? S.gen.run : null;
 	const [from, to] = genRange(all), r = genResult(t, from, to, run), base = run ? run.base[t] : tr.trigs;
-	const seg = (attr, cur, items, tips) => `<span class="seg">${items.map(([k, n]) => `<button ${attr}="${k}" aria-pressed="${cur === k}" title="${tips[k]}">${n}</button>`).join("")}</span>`;
-	const mode = gbg("Mode", seg("data-genkind", sp.kind, [["euclid", "Euclid"], ["random", "Random"], ["keep", "Keep"]], { euclid: "k hits spread evenly over n steps, rotated", random: "each step on by chance, from a seed", keep: "leave this track as it is (in a run: as it was before the run)" }), "gmode");
+	const mode = gbg("Mode", gseg("data-genkind", sp.kind, [["euclid", "Euclid"], ["random", "Random"], ["keep", "Keep"]], { euclid: "k hits spread evenly over n steps, rotated", random: "each step on by chance, from a seed", keep: "leave this track as it is (in a run: as it was before the run)" }), "gmode");
 	const params = sp.kind === "euclid"
 		? gbg("Euclid", gv("k", "Hits", sp.k, "How many hits in a cycle") + gv("n", "Steps", sp.n, "The cycle's length in steps, at most the pattern's; it repeats over the pattern") + gv("rot", "Rotate", sp.rot, "Moves the hits later") + gv("acc", "Accent", sp.acc ? sp.acc.k : "off", "Accents spread over the hits" + (V.accAll ? " (EDIT ALL is on: accents are pattern-wide and stay)" : "")))
 		: sp.kind === "random"
 		? gbg("Random", gv("dens", "Density", sp.density + "%", "The chance of each step") + gv("racc", "Accent", sp.acc ? sp.acc.density + "%" : "off", "Accents by chance on the hits")
 			+ gv("seed", "Seed", sp.seed, "The same seed gives the same steps") )
-			+ gbg("Write", seg("data-genmode", sp.mode, [["replace", "Replace"], ["add", "Add"], ["thin", "Thin"]], { replace: "the track becomes the result", add: "only steps that are off may turn on", thin: "only steps that are on may turn off" }), "gwrite")
+			+ gbg("Write", gseg("data-genmode", sp.mode, [["replace", "Replace"], ["add", "Add"], ["thin", "Thin"]], { replace: "the track becomes the result", add: "only steps that are off may turn on", thin: "only steps that are on may turn off" }), "gwrite")
 		: gbg("Keep", `<span class="gsum">Track ${t + 1} is left as it is.</span>`);
 	let sum = "";
 	if (r) {
@@ -237,26 +227,7 @@ function renderMutStrip() {
 /* a group's title as a scope chip on the Sound page */
 function mutTitle(x) { return ["syn", "fx", "rt"].includes(x.g) ? `<button class="mutg" data-mutsg="${x.g}:${x.key}" aria-pressed="${S.mut.scope.has(x.g + ":" + x.key)}" title="Add ${x.title} to what Mutate moves">${x.title}</button>` : x.title; }
 
-/* the bars' clicks, values (drag, wheel, arrows) and keys */
-document.addEventListener("click", e => {
-	const g = e.target.closest("[data-gen]"); if (g && !g.disabled) {
-		const a = g.dataset.gen;
-		if (a === "fill") genDefaults();
-		return;
-	}
-	const rk = e.target.closest("[data-rand]"); if (rk && !rk.disabled) { randomise(e.altKey); return; }	/* ⌥ (or FN) is every track; ⌘ is not (P3) */
-	const k = e.target.closest("[data-genkind]"); if (k) { genKind(k.dataset.genkind); return; }
-	const md = e.target.closest("[data-genmode]"); if (md) { genMode(md.dataset.genmode); return; }
-	const v = e.target.closest(".gv[data-gv]"); if (v && !v.dataset.dragged) { genVal(v.dataset.gv, e.shiftKey ? -1 : 1); return; }
-	const c = e.target.closest("[data-mutg],[data-mutsg]"); if (c) {
-		const id = c.dataset.mutg || c.dataset.mutsg, scope = new Set(S.mut.scope); scope.has(id) ? scope.delete(id) : scope.add(id); S.mut.scope = scope;
-		renderMutStrip(); mutLive(); e.stopPropagation(); return;
-	}
-}, true);
-document.addEventListener("keydown", e => {
-	const v = e.target.closest?.(".gv[data-gv]"); if (!v) return; const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (d == null) return;
-	e.preventDefault(); e.stopPropagation(); const k = v.dataset.gv; genVal(k, d * (e.shiftKey ? 10 : 1)); document.querySelector(`.gv[data-gv="${k}"]`)?.focus();
-}, true);
+/* the bars' clicks, values (wheel, arrows) and keys: shared/deskGenBar.js; a value's drag: mdDeskGestures.js */
 const dlgClosed = () => $("#dlg").hidden;
 const genRunOn = () => S.ws === "seq" && !!S.gen.run && S.gen.run.applied > 0 && S.gen.run.key === genKey();
 const mutRunOn = () => S.ws === "sound" && !!S.mut.trial && S.mut.trial.applied > 0 && S.mut.trial.key === mutKey();

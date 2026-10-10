@@ -87,7 +87,7 @@ APP = ['mdDeskApp.js', 'mdDeskSoundGroups.js', 'mdDeskTop.js', 'mdDeskSeq.js', '
        'mdDeskGestures.js', 'mdDeskRender.js']
 SCRIPTS = ['deskModal.js', 'deskMenu.js', 'deskCaps.js', 'deskBoot.js', 'deskSyx.js', 'deskBridge.js', 'deskDrop.js',
            'deskZoom.js', 'deskAbout.js', 'deskDocs.js', 'deskOverlay.js', 'mdDeskModel.js', 'deskGen.js',
-           'mdDeskGen.js',
+           'mdDeskGen.js', 'deskGenBar.js', 'deskSoundLayout.js',
            'deskKeys.js', 'deskKeyView.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'deskTogglePaint.js', 'deskSelect.js'] + APP + ['mdDeskLive.js', 'mdDeskLibrary.js', 'deskGlobal.js', 'mdDeskGlobal.js', 'deskAudio.js', 'mdDeskAudio.js',
            'deskAudioSelfTest.js', 'mdDeskSelfTest.js', 'deskJourney.js', 'mdDeskJourneys.js']
 for f in APP:
@@ -136,7 +136,10 @@ for a, b in [('--sans:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;',
     assert css.count(a) == 1, 'mockup stylesheet: ' + a
     css = css.replace(a, b)
 assert 'fonts.googleapis' not in css, 'mockup stylesheet: Google Fonts belong in the mockup\'s <link>, not its stylesheet'
-tail = '\n' + open(SK + 'mdOverrides.css').read()
+# a stylesheet both pages share at a place in mdOverrides.css: "/* @include shared/<file> */" on a line of its own
+# (sync-mmstudio-skin.py and the MM mockup's build.sh read it the same way), so the cascade stays as it was
+INCLUDE = re.compile(r'^/\* @include shared/([\w.-]+\.css) \*/$', re.M)
+tail = '\n' + INCLUDE.sub(lambda x: open(SHARED + x.group(1)).read().rstrip('\n'), open(SK + 'mdOverrides.css').read())
 out_css = head + css.strip('\n') + '\n' + tail
 
 # ---- 3. contract check: ids the scripts look up ----

@@ -9,12 +9,13 @@
 cd "$(dirname "$0")"
 SHARED=../../../source/elektron/md/mdJucePlugin/skins/shared
 CSS="src/10-md-base.css src/20-mm.css $SHARED/deskLcd.css $SHARED/deskModal.css $SHARED/deskBoot.css $SHARED/deskSyx.css $SHARED/deskAudio.css $SHARED/deskKeyView.css $SHARED/deskGlobal.css src/25-mm.css"
-JS="src/40-data.js src/50-state.js $SHARED/deskGen.js src/52-gen.js src/53-seam.js src/54-demo.js src/55-host.js $SHARED/deskKeys.js $SHARED/deskKeyView.js $SHARED/deskTogglePaint.js $SHARED/deskSelect.js src/56-keys.js src/58-roll.js $SHARED/deskModal.js $SHARED/deskMenu.js $SHARED/deskCaps.js $SHARED/deskBoot.js $SHARED/deskSyx.js src/60-ui.js src/70-seq.js src/75-comforts.js src/76-gen.js src/77-select.js src/80-notes.js src/85-sound-groups.js src/90-sound.js src/100-mix.js src/110-perform.js src/115-control.js $SHARED/deskGlobal.js src/117-global.js src/120-song.js src/125-lib.js $SHARED/deskAudio.js $SHARED/deskAudioSelfTest.js src/127-audio.js src/130-main.js"
+JS="src/40-data.js src/50-state.js $SHARED/deskGen.js $SHARED/deskGenBar.js $SHARED/deskSoundLayout.js src/52-gen.js src/53-seam.js src/54-demo.js src/55-host.js $SHARED/deskKeys.js $SHARED/deskKeyView.js $SHARED/deskTogglePaint.js $SHARED/deskSelect.js src/56-keys.js src/58-roll.js $SHARED/deskModal.js $SHARED/deskMenu.js $SHARED/deskCaps.js $SHARED/deskBoot.js $SHARED/deskSyx.js src/60-ui.js src/70-seq.js src/75-comforts.js src/76-gen.js src/77-select.js src/80-notes.js src/85-sound-groups.js src/90-sound.js src/100-mix.js src/110-perform.js src/115-control.js $SHARED/deskGlobal.js src/117-global.js src/120-song.js src/125-lib.js $SHARED/deskAudio.js $SHARED/deskAudioSelfTest.js src/127-audio.js src/130-main.js"
 SKIN=../../../source/elektron/md/mdJucePlugin/skins/mmStudio
 DEMO="$SHARED/deskDocs.js $SHARED/deskOverlay.js $SKIN/mmConvert.js $SKIN/mmView.js"
 {
 printf '<!doctype html>\n<html lang="en">\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Monomachine Editor</title>\n<meta name="description" content="Screen-native editor mockup for the Elektron Monomachine (SFX-6 / SFX-60, OS 1.32)">\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Silkscreen&display=swap">\n<style>\n'
-cat $CSS
+# a stylesheet both pages share, at a line "/* @include shared/<file> */" of a page's own file (as the sync scripts)
+for f in $CSS; do awk -v shared="$SHARED" '/^\/\* @include shared\/[A-Za-z0-9_.-]+\.css \*\/$/ { n = $3; sub(/^shared\//, "", n); while ((getline l < (shared "/" n)) > 0) print l; close(shared "/" n); next } { print }' "$f"; done
 printf '</style>\n'
 cat src/30-body.html
 printf '<script>\n'

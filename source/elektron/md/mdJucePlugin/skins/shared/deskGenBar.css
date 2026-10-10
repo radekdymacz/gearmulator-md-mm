@@ -1,0 +1,66 @@
+/* The GEN bar (Sequence) and the MUTATE bar (Sound), both editors (DESIGN-generators.md §5; the bars' markup:
+   deskGenBar.js). The GEN bar is the one bar under the step grid or the piano roll: GEN, a divider, the step
+   gestures behind a small ? key, then PAGE (its LEDs, ALL, FOL) at the far right; the MUTATE bar takes the rest of
+   the Sound head's row. Left to right: a title with its target (Alt: all, in the LED's colour), groups (a title on a
+   thin rule over their controls: LED radio rows, LCD value windows with the label inside, drag / wheel / arrows), a
+   muted summary, then the keys: small square caps with the keyboard key on them and a tiny label over them, in the
+   groups' title row (Random cream). Under 1400 px the hints go and the gaps narrow; the summary shrinks to what
+   fits. Each page's stylesheet takes this file in at its marker (sync-mdstudio-skin.py, the MM mockup's build.sh),
+   so the cascade is as it was; what only one editor has stays in its own stylesheet. */
+.genbar{display:flex;align-items:flex-end;gap:14px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;position:relative;flex:none;white-space:nowrap}
+.genbar>.genband{flex:1 1 auto;align-self:stretch;height:auto;margin:0;padding:0;background:none;border-radius:0}
+.gdiv{align-self:stretch;width:1px;flex:none;background:var(--rule)}
+.genbar .pagectl{position:static!important;height:30px!important;background:none!important;padding:0!important;margin:0!important;flex:none}
+.genbar .pgkey{height:30px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.genbar .ptog{margin-left:2px}
+.steplegend{position:relative;flex:none;height:30px;display:flex;align-items:center}
+.glegkey{width:22px;height:22px;padding:0;border-radius:50%;font:700 12px var(--sans);letter-spacing:0;display:grid;place-items:center}
+.glegpop.legend{display:none;position:absolute;right:-6px;bottom:calc(100% + 24px);z-index:30;flex-direction:column;align-items:stretch;gap:7px;margin:0;padding:10px 12px;background:var(--plate);border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 0 0 1px var(--rule);white-space:normal;width:300px;font:12px var(--sans);color:var(--print2)}
+.glegpop.legend>span{display:grid;grid-template-columns:16px 66px 1fr;gap:8px;align-items:start}
+.glegpop.legend b{font-weight:600;color:var(--print)}
+.glegpop.legend i.lg.none{background:none}
+.glegpop.legend small{font:11px var(--mono);color:var(--print3);padding-top:2px;border-top:1px solid var(--rule)}
+.steplegend:hover .glegpop,.glegkey:focus-visible+.glegpop{display:flex}
+.genband{display:flex;align-items:flex-end;gap:16px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;white-space:nowrap;overflow:hidden;flex:none;font:12px var(--mono);color:var(--print2)}
+.gbt{display:grid;gap:4px;flex:none;align-self:center;min-width:92px}
+.gbt b{font:700 13px var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--print)}
+.gbt span{font:12px var(--mono);color:var(--print2)}
+.gbt span.all{color:var(--led)}
+.gbg{display:grid;gap:4px;flex:none;min-width:0}
+.gbl{font:600 10px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print2);display:flex;align-items:center;gap:7px;line-height:12px}
+.gbl::after{content:"";flex:1;min-width:12px;border-top:1px solid var(--rule)}
+.gbc{display:flex;align-items:center;gap:6px;height:30px}
+.gbc .seg{gap:12px;margin-right:4px}
+.gbc .seg button{height:30px;padding:0 2px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.gv{display:inline-grid;grid-template-rows:auto auto;align-content:center;gap:1px;height:30px;box-sizing:border-box;min-width:54px;padding:0 8px;background:var(--lcd);color:var(--ink);border-radius:3px;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 18%,transparent);font:14px var(--pix);cursor:ns-resize;user-select:none;-webkit-user-select:none;touch-action:none;text-transform:uppercase;flex:none}
+.gv small{font:9px var(--pix);letter-spacing:.04em;opacity:.8;line-height:1}
+.gv b{font-weight:400;text-align:right;line-height:1}
+.gv:hover{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 40%,transparent)}
+.gv:focus-visible{outline:2px solid var(--led);outline-offset:1px}
+.gdice{width:30px;height:30px;padding:0;display:inline-grid;place-items:center;flex:none}
+.gdice svg{width:15px;height:15px;fill:currentColor}
+.genband .gsum{flex:1 1 auto;min-width:0;height:30px;line-height:30px;overflow:hidden;text-overflow:ellipsis;color:var(--print3)}
+.genband .gsum em{font-style:normal;color:var(--print2)}
+.gbc .gsum{height:auto;line-height:normal}
+.gkeys{display:flex;align-items:flex-end;gap:9px;flex:none;margin-left:auto}
+.kc{display:grid;justify-items:center;gap:4px;padding:0;background:none!important;box-shadow:none!important;color:var(--print2);min-width:30px}
+.kc small{font:600 9px var(--sans);letter-spacing:.1em;text-transform:uppercase;line-height:12px;color:var(--print2)}
+.kc kbd{width:30px;height:30px;box-sizing:border-box;display:grid;place-items:center;border-radius:3px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);font:600 12px var(--sans);letter-spacing:0}
+.kc:hover kbd{background:var(--key2)}
+.kc:active kbd{box-shadow:none;transform:translateY(1px)}
+.kc:active{transform:none}
+.kc.cream kbd{background:var(--cream);color:var(--creamtext)}
+.kc.on kbd{box-shadow:inset 0 0 0 2px var(--led),inset 0 -2px 0 rgba(0,0,0,.35)}
+.kc small em{font-style:normal;letter-spacing:.04em;text-transform:none;color:var(--print3,var(--print2));opacity:.8;margin-left:3px}
+.kc.on small{color:var(--led)}
+.kc:disabled{cursor:default}
+.kc:disabled kbd,.kc:disabled small{opacity:.4}
+.kc:focus-visible{outline:none}
+.kc:focus-visible kbd{outline:2px solid var(--led);outline-offset:1px}
+.ghint{font:11px var(--mono);color:var(--print3)}
+.sndhead .mutband{flex:1 1 auto;margin:0}
+@media (max-width:1400px){.genband{gap:12px;padding-inline:10px}.genbar{gap:10px}.genbar>.genband{padding:0}.gbt{min-width:0}.gbc .seg{gap:9px}.gkeys{gap:7px}.ghint{display:none}.genbar .pgkey{padding:0 7px}}
+@media (max-width:1340px){.genband{gap:8px}.genbar{gap:8px}.gkeys{gap:5px}.gbc{gap:4px}.gbc .seg{gap:6px;margin-right:0}.gbc .seg button{letter-spacing:.06em}.gv{padding:0 6px;min-width:50px}.genbar .pgkey{padding:0 6px}.genbar .ptog{margin-left:0}}
+@media (max-width:1500px){.genband:has(.gwrite) .gsum{display:none}}
+.th .nm:has(.gtag){gap:4px}
+.th .nm .gtag{font:10px var(--pix);font-style:normal;color:var(--ink);background:var(--lcd);padding:0 3px;border-radius:2px;margin-left:auto;flex:none;align-self:center;white-space:nowrap}
