@@ -36,7 +36,7 @@ jobs:
   site:
     name: latest.json, config.js, deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
@@ -168,6 +168,24 @@ jobs:
           set -euo pipefail
           if [[ -z "${DISCORD_WEBHOOK}" ]]; then
             echo "::notice title=No Discord post::DISCORD_RELEASE_WEBHOOK is not set."
+            exit 0
+          fi
+          # Wait until the site serves this release: Discord fetches the link preview once, at post time, and keeps an
+          # empty one if the page was not there (0.4.0: posted before the hand deploy, no image). Up to 60 minutes, so
+          # a deploy by hand right after publishing is in time; otherwise no post, and a warning says to post by hand.
+          page="https://mdmm.dev/releases/${VERSION}/"
+          live=false
+          for _ in $(seq 1 120); do
+            served="$(curl -fsS "https://mdmm.dev/latest.json?t=$(date +%s)" 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' 2>/dev/null || true)"
+            if [[ "${served}" == "${VERSION}" ]] && curl -fsS -o /dev/null "${page}"; then
+              live=true
+              break
+            fi
+            sleep 30
+          done
+          if [[ "${live}" != "true" ]]; then
+            echo "::warning title=No Discord post::${page} was not live within 60 minutes (deploy the site, then post by hand)."
             exit 0
           fi
           # the summary: the <!-- discord: ... --> line of the notes if present, else their first sentence (~140 characters)

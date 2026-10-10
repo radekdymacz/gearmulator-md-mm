@@ -36,3 +36,6 @@ Off: upstream's Elektron workflows (disabled in Actions), the per-push installer
    The tag must be on the commit CI tested, or it builds again.
 6. Merge the branch into main and push main (the site workflow reads the notes from main).
 7. Publish the release when the tag run has attached the files.
+8. Deploy the site at once (`cd site && CLOUDFLARE_ACCOUNT_ID=331224f43e4f448483cad2f1185ea965 npx --yes wrangler@4 deploy`;
+   Radek runs it until CI has the Cloudflare secrets). The Discord announcement waits up to an hour for the release
+   page to be live, so its link preview has the image.
