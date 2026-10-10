@@ -1456,9 +1456,11 @@ namespace intentCases
 			auto d = *docs;
 			mmDesk::Clipboard clip;
 			std::vector<std::string> refusedWith;
+			std::string note;	// the last command's result note
 			for(const auto& cmd : commands)
 			{
 				const auto r = mmDesk::apply(d, cmd, clip, context);
+				note = r.note;
 				if(r.clipboard)
 					clip = *r.clipboard;
 				if(!r.errors.empty())
@@ -1483,6 +1485,9 @@ namespace intentCases
 				check(false, (name + ": refused, " + refusedWith.front()).c_str());
 				continue;
 			}
+			// note: a part of what the result says (what a paste left out)
+			if(const auto* wantNote = c.find("note"))
+				check(note.find(wantNote->asString()) != std::string::npos, (name + ": the note says \"" + wantNote->asString() + "\" (" + note + ")").c_str());
 			auto expectJson = base;
 			std::vector<std::string> e2;
 			const auto expected = patch(expectJson, *c.find("after")) ? documents(expectJson, e2) : std::nullopt;

@@ -300,6 +300,7 @@ namespace mmDesk
 		const Arg page{"page", ArgType::Integer, 0, 7, true};
 		const Arg i8{"i", ArgType::Integer, 0, 7};
 		const Arg from{"from", ArgType::Integer, 0, 63}, to{"to", ArgType::Integer, 1, 64};
+		const Arg rows{"n", ArgType::Integer, 1, 12, true};	// a block's tracks from t (a selection, steps x tracks)
 		static const CommandTable table({
 			// ---- the core: documents ----
 			{"ready", Owner::Core, Gate::None, -1, {}, "the page is up: everything is published once more", CoreOp::Ready},
@@ -354,10 +355,14 @@ namespace mmDesk
 			{"arp", Owner::Core, Gate::Input, P, {p, t12, {"field", ArgType::Text, 0, 0, false, {"play", "ojmp", "mode", "range", "speed", "trigs", "length", "step"}},
 				{"v", ArgType::Integer, 0, 255}, {"i", ArgType::Integer, 0, 15, true}},
 				"ARPEGGIATOR, a field in firmware units (step i: 64 + offset, 255 muted)"},
-			{"clearSteps", Owner::Core, Gate::Input, P, {p, t12, from, to}, "a track's steps, slides and locks in [from, to)"},
-			{"copySteps", Owner::Core, Gate::Input, P, {p, t12, from, to}, "a track page to the clipboard"},
+			{"clearSteps", Owner::Core, Gate::Input, P, {p, t12, rows, from, to}, "the steps, slides and locks in [from, to) of tracks t to t + n - 1 (n 1 without it)"},
+			{"copySteps", Owner::Core, Gate::Input, P, {p, t12, rows, from, to},
+				"a block of steps (tracks t to t + n - 1, steps [from, to)) into the clipboard: notes, NOTE OFFs, envelope trigs, slides, locks"},
 			{"pasteSteps", Owner::Core, Gate::Input, P, {p, t12, from, {"to", ArgType::Integer, 1, 64, true}},
-				"the clipboard's page from step from; [from, to) is cleared first (default: the page's own length)"},
+				"the clipboard's block with its first step at from on track t; it stops at the pattern's length and M6, a row lands on a track"
+				" of its kind (synth or MIDI); to (a page): [from, to) is cleared past the block"},
+			{"copyStepsTo", Owner::Core, Gate::Input, P, {p, t12, rows, from, to, {"at", ArgType::Integer, 0, 63}, {"dt", ArgType::Integer, 0, 11, true}},
+				"a block of steps copied within the pattern to step at of track dt (its own track without dt), the clipboard untouched: duplicate, the ⌘-drag"},
 			// ---- the edit intents: Sound and Perform (the kit that plays) ----
 			{"machine", Owner::Core, Gate::Input, W, {k, t6, {"model", ArgType::Integer, 0, 255}, {"keepFx", ArgType::Bool, 0, 0, true}},
 				"a track's machine (model: its SysEx 0x5B id): its SYN page starts at the machine's defaults; without keepFx (default on) the other pages too"},

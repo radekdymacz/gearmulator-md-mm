@@ -7,6 +7,7 @@
 
 #include "mmDeskModel.h"
 
+#include "deskCore/deskBlocks.h"
 #include "deskCore/deskEdits.h"
 
 #include "elektronData/factoryGlobals.h"
@@ -809,65 +810,67 @@ namespace mmDesk
 			return _p;
 		}
 
-		// a track's step range [from, to) and its words
-		std::optional<std::pair<int, int>> range(const In& _in)
+		// ---- blocks of steps (DESIGN-step-selection.md §7): steps [from, to) of tracks t to t + n - 1 (n 1 without it), a
+		// selection or a track page; where a block put down lands is deskCore::blockLanding, as on the Machinedrum ----
+		struct StepRange
 		{
-			const int from = _in.a.integer("from"), to = _in.a.integer("to");
+			int track, rows, from, to;
+		};
+		std::string tracksName(const int _t, const int _rows)
+		{
+			return _rows == 1 ? trackName(_t) : trackName(_t) + "-" + trackName(_t + _rows - 1);
+		}
+		std::string rangeName(const StepRange& _r)
+		{
+			return tracksName(_r.track, _r.rows) + ", steps " + std::to_string(_r.from + 1) + "-" + std::to_string(_r.to);
+		}
+		std::optional<StepRange> stepRange(const In& _in)
+		{
+			const int t = _in.a.integer("t"), n = _in.a.has("n") ? _in.a.integer("n") : 1, from = _in.a.integer("from"), to = _in.a.integer("to");
+			if(t + n > 12)
+			{
+				_in.a.error("n: " + std::to_string(n) + " tracks from " + trackName(t) + " go past M6");
+				return {};
+			}
 			if(to <= from)
 			{
 				_in.a.error("Empty step range");
 				return {};
 			}
-			return std::pair<int, int>{from, to};
-		}
-		std::string rangeName(const int _t, const int _from, const int _to)
-		{
-			return trackName(_t) + ", steps " + std::to_string(_from + 1) + "-" + std::to_string(_to);
+			return StepRange{t, n, from, to};
 		}
 
-		std::optional<MmPattern> clearSteps(MmPattern _p, const In& _in)
+		// The block's steps as values, per track: its steps, slides and every lock.
+		Clipboard::Steps takeSteps(const MmPattern& _p, const StepRange& _r)
 		{
-			const auto r = range(_in);
-			if(!r)
-				return {};
-			const int t = _in.a.integer("t");
-			const auto tr = trackOf(t);
-			std::string error;
-			for(int s = r->first; s < r->second; ++s)
-				setStep(_p, tr, static_cast<size_t>(s), StepValue{}, error);
-			slideOf(_p, tr) &= ~deskCore::stepRange(static_cast<size_t>(r->first), static_cast<size_t>(r->second));
-			_in.note = "Cleared " + rangeName(t, r->first, r->second);
-			return _p;
-		}
-
-		std::optional<MmPattern> copySteps(MmPattern _p, const In& _in)
-		{
-			const auto r = range(_in);
-			if(!r)
-				return {};
-			const int t = _in.a.integer("t");
-			const auto tr = trackOf(t);
 			Clipboard::Steps c;
-			c.midi = tr.midi;
-			for(int s = r->first; s < r->second; ++s)
+			c.length = static_cast<size_t>(_r.to - _r.from);
+			for(int t = _r.track; t < _r.track + _r.rows; ++t)
 			{
-				const auto rel = static_cast<uint8_t>(s - r->first);
-				c.steps.push_back(stepAt(_p, tr, static_cast<size_t>(s)));
-				if(ed::mmStepSet(slideOf(_p, tr), static_cast<size_t>(s)))
-					c.slide |= ed::mmStepBit(rel);
-				for(const auto& lp : trackLocks(_p, tr))
+				const auto tr = trackOf(t);
+				Clipboard::Steps::Row row;
+				row.midi = tr.midi;
+				const auto locks = trackLocks(_p, tr);
+				const auto slide = tr.midi ? _p.midiSlide[tr.t] : _p.slide[tr.t];
+				for(int s = _r.from; s < _r.to; ++s)
 				{
-					const auto row = ed::mmLockRow(_p, lp);
-					if(row < 0)
-						continue;
-					const auto v = _p.lockRows[static_cast<size_t>(row)][static_cast<size_t>(s)];
-					if(v != MmPattern::g_noLock)
-						c.locks[{lp.page, lp.param}][rel] = v;
+					const auto rel = static_cast<uint8_t>(s - _r.from);
+					row.steps.push_back(stepAt(_p, tr, static_cast<size_t>(s)));
+					if(ed::mmStepSet(slide, static_cast<size_t>(s)))
+						row.slide |= ed::mmStepBit(rel);
+					for(const auto& lp : locks)
+					{
+						const auto lr = ed::mmLockRow(_p, lp);
+						if(lr < 0)
+							continue;
+						const auto v = _p.lockRows[static_cast<size_t>(lr)][static_cast<size_t>(s)];
+						if(v != MmPattern::g_noLock)
+							row.locks[{lp.page, lp.param}][rel] = v;
+					}
 				}
+				c.rows.push_back(std::move(row));
 			}
-			_in.clip.steps = std::move(c);
-			_in.note = "Copied " + rangeName(t, r->first, r->second);
-			return _p;
+			return c;
 		}
 
 		// The kit the pattern plays, for the parameters its machines have: the kit that plays when it is there.
@@ -879,6 +882,123 @@ namespace mmDesk
 			return it == _docs.kits.end() ? nullptr : &it->second;
 		}
 
+		// What a block put down did: where it landed, and what it left out.
+		struct Put
+		{
+			deskCore::BlockLanding land;
+			size_t otherKind = 0, noParam = 0, full = 0;
+		};
+
+		// Puts a block down with its first step at _at on track _track: each row replaces what the steps under it
+		// held (its steps, slides and locks), _span steps from _at (the block's length; a page paste may ask for more:
+		// the steps past the block are cleared). It stops at the pattern's length and at M6; a row lands only on a
+		// track of its kind (synth on synth, MIDI on MIDI; others are counted); a lock of a synthesis parameter the
+		// track's machine has not, or one that needs a new row while all 62 are in use, is skipped (counted). False
+		// (and the error) when no row has a track of its kind, or a note pool is full.
+		bool putSteps(MmPattern& _p, const Clipboard::Steps& _c, const int _track, const int _at, const size_t _span, const In& _in, Put& _put)
+		{
+			_put.land = deskCore::blockLanding(_c.rows.size(), _span, static_cast<size_t>(_track), static_cast<size_t>(_at), 12,
+				static_cast<size_t>(patLength(_p)));
+			const auto* kit = kitOf(_in.docs, _p);
+			for(size_t r = 0; r < _put.land.rows; ++r)
+			{
+				const auto& row = _c.rows[r];
+				const auto tr = trackOf(_track + static_cast<int>(r));
+				if(row.midi != tr.midi)
+				{
+					++_put.otherKind;
+					continue;
+				}
+				// what the steps under the row held goes: their locks too (a step that stays a trig would keep them)
+				for(size_t k = 0; k < _put.land.steps; ++k)
+					clearStepLocks(_p, tr, static_cast<size_t>(_at) + k);
+				std::string error;
+				for(size_t k = 0; k < _put.land.steps; ++k)
+				{
+					const auto s = static_cast<size_t>(_at) + k;
+					if(!setStep(_p, tr, s, k < row.steps.size() ? row.steps[k] : StepValue{}, error))
+					{
+						_in.a.error(error);
+						return false;
+					}
+					setBit(slideOf(_p, tr), s, row.slide >> k & 1);
+				}
+				const auto* machine = kit && !tr.midi ? ed::mmMachine(kit->machines[tr.t]) : nullptr;
+				for(const auto& [param, steps] : row.locks)
+				{
+					// a synthesis page parameter this track's machine does not have is skipped
+					if(param.first == 0 && machine && !(machine->synth[param.second] && *machine->synth[param.second]))
+					{
+						++_put.noParam;
+						continue;
+					}
+					for(const auto& [rel, v] : steps)
+					{
+						const auto s = static_cast<size_t>(_at) + rel;
+						if(rel >= _put.land.steps || !ed::mmStepSet(holds(_p, tr), s))
+							continue;
+						if(!setLock(_p, lockParam(tr, param.first, param.second), s, v))
+							++_put.full;
+					}
+				}
+			}
+			if(_put.land.rows && _put.otherKind == _put.land.rows)
+			{
+				_in.a.error("Track pages paste between synth tracks or between MIDI tracks");
+				return false;
+			}
+			return true;
+		}
+		std::string putNote(const std::string& _verb, const Put& _put, const int _track, const int _at, const MmPattern& _p)
+		{
+			auto note = deskCore::blockNote(_verb, tracksName(_track, static_cast<int>(_put.land.rows)), static_cast<size_t>(_at), _put.land,
+				static_cast<size_t>(patLength(_p)), "M6");
+			if(_put.otherKind)
+				note += ". " + std::to_string(_put.otherKind) + " track(s) of the other kind left out: synth steps paste onto synth tracks, MIDI steps onto MIDI tracks";
+			if(_put.noParam)
+				note += ". " + std::to_string(_put.noParam) + " lock(s) skipped: this machine has no such parameter";
+			if(_put.full)
+				note += ". " + std::to_string(_put.full) + " lock(s) skipped: all 62 locked parameters are in use";
+			return note;
+		}
+		// The first step a block is put down at: within the pattern's length.
+		bool putAt(const MmPattern& _p, const In& _in, const int _at)
+		{
+			if(_at < patLength(_p))
+				return true;
+			_in.a.error("Step " + std::to_string(_at + 1) + " is past the pattern's length (" + std::to_string(patLength(_p)) + ")");
+			return false;
+		}
+
+		std::optional<MmPattern> clearSteps(MmPattern _p, const In& _in)
+		{
+			const auto r = stepRange(_in);
+			if(!r)
+				return {};
+			std::string error;
+			for(int t = r->track; t < r->track + r->rows; ++t)
+			{
+				const auto tr = trackOf(t);
+				for(int s = r->from; s < r->to; ++s)
+					setStep(_p, tr, static_cast<size_t>(s), StepValue{}, error);
+				slideOf(_p, tr) &= ~deskCore::stepRange(static_cast<size_t>(r->from), static_cast<size_t>(r->to));
+			}
+			_in.note = "Cleared " + rangeName(*r);
+			return _p;
+		}
+
+		std::optional<MmPattern> copySteps(MmPattern _p, const In& _in)
+		{
+			const auto r = stepRange(_in);
+			if(!r)
+				return {};
+			_in.clip.steps = takeSteps(_p, *r);
+			_in.note = "Copied " + rangeName(*r);
+			return _p;
+		}
+
+		// The clipboard's block with its first step at from on track t; to (a page paste): [from, to) is cleared
+		// past the block.
 		std::optional<MmPattern> pasteSteps(MmPattern _p, const In& _in)
 		{
 			if(!_in.clip.steps)
@@ -888,54 +1008,33 @@ namespace mmDesk
 			}
 			const auto& c = *_in.clip.steps;
 			const int t = _in.a.integer("t"), from = _in.a.integer("from");
-			const auto tr = trackOf(t);
-			if(c.midi != tr.midi)
-			{
-				_in.a.error("Track pages paste between synth tracks or between MIDI tracks");
-				return {};
-			}
-			const int to = std::min<int>(64, _in.a.has("to") ? _in.a.integer("to") : from + static_cast<int>(c.steps.size()));
+			const int to = _in.a.has("to") ? _in.a.integer("to") : from + static_cast<int>(c.length);
 			if(to <= from)
 			{
 				_in.a.error("Empty step range");
 				return {};
 			}
-			std::string error;
-			for(int s = from; s < to; ++s)
-			{
-				const auto rel = static_cast<size_t>(s - from);
-				if(!setStep(_p, tr, static_cast<size_t>(s), rel < c.steps.size() ? c.steps[rel] : StepValue{}, error))
-				{
-					_in.a.error(error);
-					return {};
-				}
-				setBit(slideOf(_p, tr), static_cast<size_t>(s), rel < 64 && (c.slide >> rel & 1));
-			}
-			const auto* kit = kitOf(_in.docs, _p);
-			const auto* machine = kit && !tr.midi ? ed::mmMachine(kit->machines[tr.t]) : nullptr;
-			size_t noParam = 0, full = 0;
-			for(const auto& [param, steps] : c.locks)
-			{
-				// a synthesis page parameter this track's machine does not have is skipped
-				if(param.first == 0 && machine && !(machine->synth[param.second] && *machine->synth[param.second]))
-				{
-					++noParam;
-					continue;
-				}
-				for(const auto& [rel, v] : steps)
-				{
-					const auto s = static_cast<size_t>(from + rel);
-					if(static_cast<int>(s) >= to || !ed::mmStepSet(holds(_p, tr), s))
-						continue;
-					if(!setLock(_p, lockParam(tr, param.first, param.second), s, v))
-						++full;
-				}
-			}
-			_in.note = "Pasted into " + rangeName(t, from, to);
-			if(noParam)
-				_in.note += ". " + std::to_string(noParam) + " lock(s) skipped: this machine has no such parameter";
-			if(full)
-				_in.note += ". " + std::to_string(full) + " lock(s) skipped: all 62 locked parameters are in use";
+			Put put;
+			if(!putAt(_p, _in, from) || !putSteps(_p, c, t, from, static_cast<size_t>(to - from), _in, put))
+				return {};
+			_in.note = putNote("Pasted into", put, t, from, _p);
+			return _p;
+		}
+
+		// A block of this pattern copied to another place in it (step at, track dt; its own track without dt), the
+		// clipboard untouched: duplicate (at = to) and the ⌘-drag of a selection. The block is read before it is put
+		// down, so a drop over its own source is fine.
+		std::optional<MmPattern> copyStepsTo(MmPattern _p, const In& _in)
+		{
+			const auto r = stepRange(_in);
+			if(!r)
+				return {};
+			const int at = _in.a.integer("at"), dt = _in.a.has("dt") ? _in.a.integer("dt") : r->track;
+			const auto block = takeSteps(_p, *r);
+			Put put;
+			if(!putAt(_p, _in, at) || !putSteps(_p, block, dt, at, block.length, _in, put))
+				return {};
+			_in.note = putNote("Copied " + rangeName(*r) + " to", put, dt, at, _p);
 			return _p;
 		}
 
@@ -945,7 +1044,7 @@ namespace mmDesk
 				{"step", step}, {"slide", slide}, {"swingStep", swingStep}, {"lock", lock}, {"clearLane", clearLane},
 				{"clearLocks", clearLocks}, {"clearPattern", clearPattern}, {"steps", steps}, {"rotate", rotate},
 				{"doublePattern", doublePattern}, {"length", length}, {"speed", speed}, {"swing", swing}, {"transpose", transpose},
-				{"arp", arp}, {"clearSteps", clearSteps}, {"copySteps", copySteps}, {"pasteSteps", pasteSteps}};
+				{"arp", arp}, {"clearSteps", clearSteps}, {"copySteps", copySteps}, {"pasteSteps", pasteSteps}, {"copyStepsTo", copyStepsTo}};
 			return edits;
 		}
 

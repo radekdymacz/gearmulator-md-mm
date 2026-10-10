@@ -1426,7 +1426,7 @@
 			],
 			"mod": "",
 			"group": "Selected track",
-			"does": "Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
+			"does": "Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
 			"dispatched": true
 		},
 		{
@@ -1473,28 +1473,6 @@
 			"group": "Sequence",
 			"does": "Unmark the tracks marked for paste",
 			"dispatched": true
-		},
-		{
-			"id": "roll-fill-2",
-			"scope": "seq",
-			"keys": [
-				"roll"
-			],
-			"mod": "cmd",
-			"group": "Sequence",
-			"does": "Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step",
-			"area": "Roll"
-		},
-		{
-			"id": "roll-fill-4",
-			"scope": "seq",
-			"keys": [
-				"roll"
-			],
-			"mod": "cmd+shift",
-			"group": "Sequence",
-			"does": "Click: every 4th step from there to the end",
-			"area": "Roll"
 		},
 		{
 			"id": "lockstep-wheel",
@@ -1574,6 +1552,136 @@
 			"group": "All",
 			"does": "Click: randomise every track (Sound: every synth track; VOL and TUNE stay)",
 			"area": "GEN bar"
+		},
+		{
+			"id": "cut",
+			"scope": "seq",
+			"keys": [
+				"X"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Cut the selected steps (copy, then clear; one undo step)",
+			"short": "Cut",
+			"dispatched": true
+		},
+		{
+			"id": "duplicate",
+			"scope": "seq",
+			"keys": [
+				"D"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Duplicate the selected steps right after themselves (the clipboard stays); again: once more",
+			"short": "Duplicate",
+			"dispatched": true
+		},
+		{
+			"id": "select-all",
+			"scope": "seq",
+			"keys": [
+				"A"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Select every step of the six tracks shown (synth or MIDI) up to the length (then ⌘C copies them as a block)",
+			"short": "Select all",
+			"dispatched": true
+		},
+		{
+			"id": "sel-move",
+			"scope": "seq",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Move the selection a step earlier / later (one step selected: a cursor)",
+			"short": "Sel ← / Sel →",
+			"dispatched": true
+		},
+		{
+			"id": "sel-extend",
+			"scope": "seq",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Extend the selection a step earlier / later",
+			"short": "Grow ← / Grow →",
+			"dispatched": true
+		},
+		{
+			"id": "sel-trigs",
+			"scope": "seq",
+			"keys": [
+				"Enter"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "A note on each empty selected step, or, when none is empty, the selected notes off (one undo step)",
+			"short": "Trigs",
+			"dispatched": true
+		},
+		{
+			"id": "deselect",
+			"scope": "seq",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Clear the step selection",
+			"short": "Deselect",
+			"dispatched": true
+		},
+		{
+			"id": "step-select",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Click (roll or trig rows): select the step (⌘V pastes there). Drag: select steps. Drag the selection: a copy where you let go",
+			"area": "Roll"
+		},
+		{
+			"id": "step-extend",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "cmd+shift",
+			"group": "Sequence",
+			"does": "Click: extend the selection to the step (on another track's roll: the tracks between too)",
+			"area": "Roll"
+		},
+		{
+			"id": "ruler-select",
+			"scope": "seq",
+			"keys": [
+				"step ruler"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Click or drag: select steps of the selected track; ⇧-click extends",
+			"area": "Roll"
+		},
+		{
+			"id": "step-menu",
+			"scope": "seq",
+			"keys": [
+				"right-click a step"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "The step menu: note on / off, NOTE OFF, trigless, slide, a chord note (roll), copy, cut, paste here, duplicate, clear, fill every 2nd / 4th from it; on a selected step for the whole selection (Ctrl-click on a Mac)",
+			"area": "Roll"
 		},
 		{
 			"id": "global-key",
@@ -1744,7 +1852,7 @@
 			],
 			"mod": "cmd",
 			"group": "Anywhere",
-			"does": "Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",
+			"does": "Copy (Sequence: the selected steps, or the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",
 			"dispatched": true
 		},
 		{
@@ -1755,7 +1863,7 @@
 			],
 			"mod": "cmd",
 			"group": "Anywhere",
-			"does": "Paste (Sequence: into every track marked for paste too)",
+			"does": "Paste (Sequence: at the selected step, the block from its first step and track; into every track marked for paste)",
 			"dispatched": true
 		},
 		{
@@ -1902,7 +2010,7 @@
 			],
 			"mod": "",
 			"group": "Sequence",
-			"does": "Clear the page shown of the selected track (Song: delete the row)",
+			"does": "Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row",
 			"dispatched": true
 		},
 		{

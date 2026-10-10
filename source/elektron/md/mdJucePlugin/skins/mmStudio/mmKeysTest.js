@@ -39,13 +39,15 @@ const mods = b => (b.mod || "") === "" && !b.code && b.keys.some(k => k.length =
 const run = list.filter(b => b.run), name = b => `${Keys.label(b)} (${b.group})`;
 
 /* ---- rule: no ⇧ chords, ⌘ only for the standard edit keys ---- */
-const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV"]);
+/* the standard edit keys, and the selection's (K7, as the Machinedrum Editor: ⌘X ⌘D ⌘A, ⇧← ⇧→ extend) */
+const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV", "cmd KeyX", "cmd KeyD", "cmd KeyA", "shift ArrowLeft", "shift ArrowRight"]);
 const badMod = run.filter(b => ids(b).some(id => { const m = b.mod || ""; return m.includes("shift") && !STD_CMD.has(m + " " + id) || m.includes("cmd") && !STD_CMD.has(m + " " + id); }));
-check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
+check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V, the selection's ⌘X ⌘D ⌘A ⇧← ⇧→" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
 
 /* ---- rule: no two dispatched entries on one key and modifiers, unless both are conditional and known exclusive ---- */
-/* Escape: each closes what is open (the help, a dialog, LEARN, the paste marks, GLOBAL), one at a time */
-const EXCLUSIVE = new Set([" Escape"]);
+/* Escape: each closes what is open (the help, a dialog, LEARN, the paste marks, the selection, GLOBAL), one at a time;
+   ← →: the Song's rows or the selected steps (by workspace) */
+const EXCLUSIVE = new Set([" Escape", " ArrowLeft", " ArrowRight"]);
 const by = new Map();
 for (const b of run) for (const id of ids(b)) for (const m of mods(b)) { const k = m + " " + id; by.set(k, [...(by.get(k) || []), b]); }
 const clash = [...by].filter(([k, bs]) => bs.length > 1 && (bs.some(b => !b.when) || !EXCLUSIVE.has(k)));
@@ -62,7 +64,7 @@ const WANT = [["", "KeyR", "randomise the selected track"], ["alt", "KeyR", "ran
 const missing = WANT.filter(([m, id]) => !has(m, id));
 check(!missing.length, "the approved keys are bound" + (missing.length ? ": missing " + missing.map(([m, id, w]) => `${m}+${id} (${w})`).join(", ") : ""));
 const GONE = [["cmd", "KeyR", "⌘R"], ["shift", "KeyR", "⇧R"], ["shift", "KeyD", "⇧D"], ["shift", "KeyF", "⇧F"], ["shift", "KeyG", "⇧G"], ["shift", "KeyL", "⇧L"],
-	["shift", "ArrowLeft", "⇧← rotate"], ["shift", "Space", "⇧Space"]];
+	["shift", "Space", "⇧Space"]];
 const still = GONE.filter(([m, id]) => has(m, id));
 /* R randomises: on Sound MUTATE, elsewhere GEN; Alt+R every track (matched on the physical key, e.code) */
 const rKeys = run.filter(b => b.code === "KeyR");
@@ -76,6 +78,9 @@ check(piano && PIANO.every((k, i) => piano[k] === i) && Object.keys(piano).lengt
 check(["A", "S", "D", "F", "G", "H", "J", "K", "L"].map(k => piano[k]).join(" ") === "0 2 4 5 7 9 11 12 14", "the home row stays the white keys C D E F G A B C D");
 const playing = run.filter(b => b.run && b.group === "Playing" && b.hidden).flatMap(ids);
 check(PIANO.every(k => playing.includes("Key" + k)), "every piano key is dispatched to the keyboard: " + PIANO.filter(k => !playing.includes("Key" + k)).join(" "));
+/* ⇧← ⇧→ extend the selection now (K7); rotate stays on Alt + the arrows */
+const shiftRotate = run.filter(b => b.mod === "shift" && ids(b).includes("ArrowLeft") && /rotate/i.test(does(b)));
+check(!shiftRotate.length, "⇧← does not rotate (it extends the selection)");
 check(!still.length, "the removed keys are gone" + (still.length ? ": " + still.map(x => x[2]).join(", ") : ""));
 /* the MM's old map: R was RECORD and L was LEARN; the home row's L is a note now and recording is Alt+Space */
 const oldR = run.filter(b => ids(b).includes("KeyR") && /record/i.test(does(b))), oldL = run.filter(b => ids(b).includes("KeyL") && /learn/i.test(does(b)));

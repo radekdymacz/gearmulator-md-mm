@@ -113,7 +113,22 @@ brings.
 - `mdDeskKeysTest.js`: ⌘X and ⌘D join the allowed ⌘ keys.
 - Journey `journey-seq-select-copy-paste` (`mdDeskJourneys.js`): on the firmware.
 
-## 7. The Monomachine Editor (not built)
+## 7. The Monomachine Editor (built 2026-10-10, branch `feat/mm-step-selection`)
+
+As planned below, with the Machinedrum's code shared rather than copied: the selection's value, gesture, keys and
+step menu order are `skins/shared/deskSelect.js` (`StepSel`), where a block lands in the core is
+`deskCore/deskBlocks.h`. The Monomachine's own: `mmDesk/mmDeskEdit.cpp` (`Clipboard::Steps` as rows, each synth or
+MIDI; `n` on `copySteps` / `clearSteps`; `copyStepsTo`; a paste stops at the length and at M6, a row lands only on a
+track of its kind, the steps under it lose their old locks), `mmView.js` (the same writes, nine intent cases), and
+the mockup's `77-select.js`. The gesture is ⌘ as on the Machinedrum (DESIGN-keymap.md D1): ⌘-click or ⌘-drag in the
+piano roll or a trig row, the step ruler without a modifier, ⌘⇧-click extends (on another track's roll: the tracks
+between too, since the roll shows one track), ⌘-drag of the selection drops a copy; ↑ ↓ move it a track within the
+side shown, ⌘A takes the six tracks shown. The fill moved from ⌘-click to the step menu (right-click in the roll or a
+trig row), whose marks are the Monomachine's: note on / off, NOTE OFF, trigless, slide, and a chord note at the pitch
+right-clicked. Delete takes only the selection (D3). Swing stays out of a block on the Monomachine (as its page copy
+always did: swing is the pattern's groove, a track of its own).
+
+The plan, as written before:
 
 The MM page is the generated mockup (`doc/modern-ux/mm-mockup/src/`, synced by `sync-mmstudio-skin.py`); the same
 model needs, in order:
