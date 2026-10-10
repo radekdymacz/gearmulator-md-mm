@@ -4313,6 +4313,27 @@
         },
         {
           "type": "object",
+          "description": "core: GLOBAL › Reset to defaults: the active global becomes the one the machine ships with (measured, mdDeskFirmwareTest factoryglobal)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "globalReset"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "machine: read a document now",
           "required": ["op", "kind", "slot"],
           "properties": {

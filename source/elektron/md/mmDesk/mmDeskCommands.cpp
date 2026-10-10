@@ -147,7 +147,7 @@ namespace mmDesk
 			{"mute", &MmMachine::cmdMute}, {"seqMode", &MmMachine::cmdSeqMode}, {"followHost", &MmMachine::cmdFollowHost}, {"muteMidi", &MmMachine::cmdMuteMidi},
 			{"poly", &MmMachine::cmdPoly}, {"record", &MmMachine::cmdRecord}, {"hwSend", &MmMachine::cmdHwSend},
 			{"chain", &MmMachine::cmdChain}, {"chainClear", &MmMachine::cmdChainClear},
-			{"noteOn", &MmMachine::cmdNoteOn}, {"noteOff", &MmMachine::cmdNoteOff}};
+			{"noteOn", &MmMachine::cmdNoteOn}, {"noteOff", &MmMachine::cmdNoteOff}, {"globalSlot", &MmMachine::cmdGlobalSlot}};
 		return map;
 	}
 
@@ -354,6 +354,21 @@ namespace mmDesk
 		m_port.sendSysex(ed::mmSetStatus(ed::MmStatus::SongMode, song ? 1 : 0));
 		m_port.sendSysex(ed::mmStatusRequest(ed::MmStatus::SongMode));
 		return ok(song ? "SONG mode: the machine plays the song." : "PATTERN mode: the machine plays the pattern.");
+	}
+
+	// B-051, F3: the GLOBAL page's slot keys: SET ACTIVE GLOBAL (0x56, not while the machine is on SYSEX RECV), then the
+	// machine says which is active (status) and the editor reads that slot when it does not know it
+	Outcome MmMachine::cmdGlobalSlot(const Value& _m, const Documents&)
+	{
+		const auto slot = static_cast<uint8_t>(num(_m, "slot") & 7);
+		if(m_profile.wire || m_recv.state() == RecvSession::State::Idle)
+			m_port.sendSysex(ed::mmSetActiveGlobal(slot));
+		else
+			m_activateGlobal = slot;
+		m_port.sendSysex(ed::mmStatusRequest(ed::MmStatus::Global));
+		if(!known({Kind::Global, slot}))
+			request({Kind::Global, slot}, true);
+		return ok("GLOBAL " + std::to_string(slot + 1) + " is active");
 	}
 
 	Outcome MmMachine::cmdMute(const Value& _m, const Documents& _view)

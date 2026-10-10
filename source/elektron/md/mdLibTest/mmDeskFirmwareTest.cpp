@@ -9,6 +9,7 @@
 #include "contractCheck.h"
 #include "mdFirmwareSession.h"
 
+#include "elektronData/factoryGlobals.h"
 #include "elektronData/mmCommands.h"
 #include "elektronData/mmJson.h"
 #include "elektronData/mmKit.h"
@@ -2585,6 +2586,141 @@ namespace
 		_r.run(2000);
 	}
 
+	// B-051, F3: the global the machine ships with (every slot of a fresh machine is elektronData::mmFactoryGlobal; FACTORY_PRINT=1
+	// prints it raw), GLOBAL › Reset to defaults (span 0, base 4 and TEMPO SYNC changed, then globalReset: the factory global
+	// reads back, a mute reaches T1-T6), and the slot keys (globalSlot: the machine says the slot is active).
+	void factoryGlobal(const Bytes& _rom)
+	{
+		std::puts("factory global, Reset to defaults, the slot keys (B-051, F3)");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		const auto tLoad = r.ms();
+		while(r.desk->loaded() < 288 && r.ms() - tLoad < 60000)
+			r.run(100);
+		r.run(1000);
+		for(uint8_t s = 0; s < ed::MmGlobal::g_slots; ++s)
+		{
+			const auto g = r.desk->global(s);
+			if(g && std::getenv("FACTORY_PRINT"))
+			{
+				const auto raw = ed::mmGlobalRaw(*g);
+				std::printf("  MM factory global %d raw:", s + 1);
+				for(size_t i = 0; i < raw.size(); ++i) std::printf("%s0x%02x,", i % 16 ? " " : "\n    ", raw[i]);
+				std::printf("\n");
+			}
+			std::string diff;
+			if(g)
+			{
+				const auto a = ed::mmGlobalRaw(*g), b = ed::mmGlobalRaw(ed::mmFactoryGlobal(s));
+				for(size_t i = 0; i < a.size() && diff.size() < 120; ++i)
+					if(a[i] != b[i]) { char x[24]; std::snprintf(x, sizeof x, " %03zx:%02x/%02x", i, a[i], b[i]); diff += x; }
+				if(g->version != 3 || g->revision != 1) diff += " format " + std::to_string(g->version) + "." + std::to_string(g->revision);
+			}
+			check(g && *g == ed::mmFactoryGlobal(s), "global " + std::to_string(s + 1) + " of a fresh machine is elektronData::mmFactoryGlobal" + diff);
+		}
+		const auto cur = static_cast<uint8_t>(r.desk->currentGlobal());
+		r.msg(R"({"op":"globalMidi","g":7301,"span":0,"base":3,"clockIn":true})");
+		r.run(6000);
+		const auto g = r.desk->global(cur);
+		check(g && g->channelSpan == 0 && g->baseChannel == 3 && g->tempoSync == 1, "span 0, base 4, TEMPO SYNC EXT read back");
+		r.msg(R"({"op":"globalReset","g":7302})");
+		check(r.lastResult().find("ok")->asBool(), "globalReset taken");
+		r.run(6000);
+		const auto back = r.desk->global(cur);
+		check(back && *back == ed::mmFactoryGlobal(cur), "the active global reads back as the factory global (GLOBAL " + std::to_string(cur + 1) + ")");
+		r.run(7000);	// the channels settle (ChannelReach)
+		int landed = 0;
+		for(int t = 0; t < 6; ++t)
+		{
+			r.msg("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":true}");
+			r.run(600);
+			landed += ((r.tel.mutes.load() >> t) & 1) == 1;
+			r.msg("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":false}");
+			r.run(600);
+		}
+		check(landed == 6, "after the reset a mute reaches each of T1-T6 (" + std::to_string(landed) + " of 6)");
+		// the slot keys: GLOBAL 3 active, then back
+		const int to = cur == 2 ? 3 : 2;
+		r.msg("{\"op\":\"globalSlot\",\"slot\":" + std::to_string(to) + "}");
+		r.run(3000);
+		check(r.desk->currentGlobal() == to && r.desk->global(static_cast<uint8_t>(to)).has_value(), "globalSlot: GLOBAL " + std::to_string(to + 1) + " is active, read");
+		r.msg("{\"op\":\"globalSlot\",\"slot\":" + std::to_string(cur) + "}");
+		r.run(3000);
+		check(r.desk->currentGlobal() == cur, "and back to GLOBAL " + std::to_string(cur + 1));
+	}
+
+	// B-051, F3, measuring: what the global's undecoded bytes do (x07-x11, x30-x35, the 6 "control" bytes x36-x3b). Each byte
+	// set to 1 (0 when it is not 0; GPROBE_VAL another value), the global made active, then: the machine's MIDI out while it
+	// plays 1 s (clock F8, Start FA, Stop FC), a pattern picked (program change out), and a program change sent in on
+	// each channel (does the pattern follow).
+	void globalProbe(const Bytes& _rom)
+	{
+		std::puts("global probe (undecoded bytes)");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		const auto tLoad = r.ms();
+		while(r.desk->loaded() < 288 && r.ms() - tLoad < 60000)
+			r.run(100);
+		r.run(1000);
+		const auto cur = static_cast<uint8_t>(r.desk->currentGlobal());
+		const auto g0 = *r.desk->global(cur);
+		const auto raw0 = ed::mmGlobalRaw(g0);
+		std::printf("  factory raw:");
+		for(size_t i = 0; i < raw0.size(); ++i) std::printf("%s%02x", i % 32 ? " " : "\n   ", raw0[i]);
+		std::printf("\n");
+		int f8 = 0, fa = 0, fc = 0, pcs = 0, pcCh = -1, pcV = -1;
+		r.m.onMidi = [&](const synthLib::SMidiEvent& _e)
+		{
+			if(_e.a == 0xf8) ++f8; else if(_e.a == 0xfa) ++fa; else if(_e.a == 0xfc) ++fc;
+			else if((_e.a & 0xf0) == 0xc0) { ++pcs; pcCh = _e.a & 15; pcV = _e.b; }
+		};
+		const auto measure = [&](const char* _what)
+		{
+			f8 = fa = fc = pcs = 0; pcCh = pcV = -1;
+			r.msg(R"({"op":"play"})"); r.run(1000); r.msg(R"({"op":"stop"})"); r.run(600);
+			const int p0 = r.desk->currentPattern();
+			r.msg("{\"op\":\"select\",\"p\":" + std::to_string(p0 == 3 ? 4 : 3) + "}"); r.run(800);
+			const int pcOut = pcs, outCh = pcCh;
+			// program change in: on each channel in turn, a pattern the machine is not on
+			int inCh = -1;
+			for(int ch = 0; ch < 16 && inCh < 0; ++ch)
+			{
+				const int want = 10 + ch, before = r.desk->currentPattern();
+				r.out.push_back({static_cast<uint8_t>(0xc0 | ch), static_cast<uint8_t>(want)});
+				r.run(400);
+				if(r.desk->currentPattern() == want && before != want) inCh = ch;
+			}
+			std::printf("  %-22s clock out %3d, start %d, stop %d; PC out %d (ch %d); PC in: %s\n", _what, f8, fa, fc, pcOut, outCh + 1,
+				inCh < 0 ? "no" : ("ch " + std::to_string(inCh + 1)).c_str());
+			r.msg(R"({"op":"select","p":0})"); r.run(800);
+		};
+		measure("as booted");
+		std::vector<size_t> cand;
+		for(size_t i = 0x07; i < 0x12; ++i) cand.push_back(i);
+		for(size_t i = 0x30; i < 0x3c; ++i) cand.push_back(i);
+		if(const char* only = std::getenv("GPROBE_BYTES")) { cand.clear(); for(const char* q = only; *q;) { cand.push_back(std::strtoul(q, const_cast<char**>(&q), 16)); if(*q == ',') ++q; } }
+		for(const auto i : cand)
+		{
+			auto raw = raw0;
+			raw[i] = raw0[i] ? 0 : 1;
+			if(const char* v = std::getenv("GPROBE_VAL")) raw[i] = static_cast<uint8_t>(std::strtoul(v, nullptr, 16));
+			if(const char* also = std::getenv("GPROBE_ALSO"))	// "0c=1": another byte set with it
+				raw[std::strtoul(also, nullptr, 16)] = static_cast<uint8_t>(std::strtoul(std::strchr(also, '=') + 1, nullptr, 16));
+			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(*ed::mmGlobalFromRaw(raw, cur))) + "}");
+			r.run(5000);
+			char what[40];
+			std::snprintf(what, sizeof what, "byte %02zx %02x -> %02x:", i, raw0[i], raw[i]);
+			measure(what);
+			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(g0)) + "}");
+			r.run(5000);
+		}
+		r.m.onMidi = nullptr;
+	}
+
 	// B-051, measuring: which track a CC on each MIDI channel reaches, under a global with these channels (SPAN_PROBE=
 	// "base,span" 0-based, e.g. "12,6" or "0,0"). Prints a line per channel: the track whose AMP value moved.
 	void channelProbe(const Bytes& _rom)
@@ -2809,6 +2945,10 @@ int main(const int _argc, char** _argv)
 			channelSpan(rom);
 		if(only == "spanprobe")
 			channelProbe(rom);
+		if(only == "globalprobe")
+			globalProbe(rom);
+		if(only.empty() || only == "factoryglobal")
+			factoryGlobal(rom);
 		if(only == "machine")
 		{
 			machineStays(rom);

@@ -9,6 +9,7 @@
 
 #include "deskCore/deskEdits.h"
 
+#include "elektronData/factoryGlobals.h"
 #include "elektronData/mmJson.h"
 #include "elektronData/mmMachines.h"
 #include "elektronData/mmValidate.h"
@@ -1313,7 +1314,19 @@ namespace mmDesk
 				_g.tempoSync = _in.a.flag("clockIn") ? 1 : 0;
 			if(_in.a.has("transportIn"))
 				_g.transportIn = _in.a.flag("transportIn") ? 1 : 0;
+			if(_in.a.has("clockOut"))
+				_g.clockOut = _in.a.flag("clockOut") ? 1 : 0;
+			if(_in.a.has("transportOut"))
+				_g.transportOut = _in.a.flag("transportOut") ? 1 : 0;
+			if(_in.a.has("programChangeOut"))
+				_g.programChangeOut = _in.a.flag("programChangeOut") ? 1 : 0;
 			return _g;
+		}
+
+		// B-051, F3: GLOBAL › Reset to defaults: the global the machine ships with, measured (elektronData::mmFactoryGlobal)
+		std::optional<MmGlobal> globalReset(MmGlobal _g, const In&)
+		{
+			return ed::mmFactoryGlobal(_g.position);
 		}
 
 		// ---- the MULTI MAP: up to 32 key ranges [upper key, pattern (255 CUR), offset (255 ---), length, transpose, timing];
@@ -1449,7 +1462,7 @@ namespace mmDesk
 
 		const Edits<MmGlobal>& globalEdits()
 		{
-			static const Edits<MmGlobal> edits{{"routing", routing}, {"midiTrack", midiTrack}, {"globalMidi", globalMidi}, {"multiMap", multiMap},
+			static const Edits<MmGlobal> edits{{"routing", routing}, {"midiTrack", midiTrack}, {"globalMidi", globalMidi}, {"globalReset", globalReset}, {"multiMap", multiMap},
 				{"multiMapSplit", multiMapSplit}, {"multiMapDelete", multiMapDelete}};
 			return edits;
 		}

@@ -278,15 +278,3 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 /* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
 @media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}
 
-/* B-051, F3: GLOBAL › MIDI (117-global.js), the Machinedrum Editor's GLOBAL panel at the width of its two cards */
-.globpop{width:min(760px,calc(100vw - 32px))}
-.globgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.globgrid .card{gap:8px}
-.grow2{display:flex;align-items:center;gap:8px;min-height:28px}
-.grow2 .ilab{min-width:104px}
-.grow2 .seg button{height:24px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em}
-.gtracks{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
-.gtk{display:grid;gap:1px;padding:4px 5px;border:1px solid var(--rule);border-radius:3px;font:500 12px var(--mono);text-align:center}
-.gtk small{font:10px var(--mono);color:var(--keydim)}
-.gtk.none{opacity:.55;border-style:dashed}
-.gwarn{margin:0;font-size:12px;color:var(--red)}

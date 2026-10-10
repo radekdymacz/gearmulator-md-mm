@@ -125,6 +125,7 @@ after it ride in `hidden.rowsAfterEnd`.
 | `masterTune` | tenths of Hz | panel |
 | `midiSeq.channels`, `midiSeq.ccs` | the MIDI sequencer tracks' channels and CL1-4 CC numbers | factory set (10-15; 1 2 7 10) |
 | `multiMap` | 6 fields x 32 ranges: upper key; pattern (255 = CUR); offset (255 = ---); length; transpose (signed byte); timing (0 DIR, 1 2 4 8 16 32). Unused ranges repeat the last upper key | panel (MULTIMAP EDIT, MM-P4) |
+| `controlOut` | `clock` 1 sends MIDI clock (0x0b), `transport` 1 sends Start/Stop (0x0a), `programChange` not 0 sends a program change on the base channel (0x0c); missing in older documents (then `x07` holds all eleven bytes) | firmware (`mmDeskFirmwareTest globalprobe`, B-051) |
 | `controlIn` | CONTROL IN: `tempoSync` 0 INTERNAL, 1 EXT MIDI CLK; `transport` 0 IGNORE, 1 ACCEPT (MIDI Start/Stop). A DAW's plug-in sets both (P7, `followHost`) | panel (MM-P4) |
 | `control`, `firmware` | CONTROL OUT1/OUT2 and the rest, kept | |
 
@@ -176,7 +177,9 @@ the six MIDI sequencer tracks. Values in firmware units.
 - Mix: `level`, `route` (`out`: AB 1, CD 2, EF 4), `input`, `param` (`page` 0-6 a synth track's, 7 a MIDI track's MIDI
   page), `trigPos`, `legato`, `portamento`, `routing`, `midiTrack` (`ch`, `cc`).
 - GLOBAL › MIDI (B-051): `globalMidi` (`base`, `auto`, `multiTrig`, `multiMap`: a channel 0-15, null OFF; `span` 0-16;
-  `clockIn`, `transportIn`), the active global's MIDI CHANNELS and CONTROL IN.
+  `clockIn`, `transportIn`, `clockOut`, `transportOut`, `programChangeOut`), the active global's MIDI CHANNELS, CONTROL IN and
+  OUT; `globalReset`, the active global becomes the factory one (`elektronData::mmFactoryGlobal`, measured); the machine
+  command `globalSlot {slot}` makes a slot active (0x56).
 - Sequence: `step` (`v`: null, `{off:true}` or `{n, a, f, l, notrig?}`), `slide`, `swingStep`, `lock` (`v` null
   clears), `clearLane`, `clearLocks`, `clearPattern`, `steps` (a range of tracks made exactly the rows given: the
   generators), `rotate`, `doublePattern`, `length`, `speed`, `swing` (percent), `transpose`, `arp` (`field`, `v`, `i`

@@ -18,6 +18,10 @@ namespace elektronData
 			_io.u8(_g.tempoSync);
 			_io.u8(_g.transportIn);
 			_io.bytes(_g.x07);
+			_io.u8(_g.transportOut);
+			_io.u8(_g.clockOut);
+			_io.u8(_g.programChangeOut);
+			_io.bytes(_g.x0d);
 			_io.bytes(_g.midiSeqChannels);
 			_io.bytes(_g.midiSeqCcs);
 			_io.bytes(_g.x30);

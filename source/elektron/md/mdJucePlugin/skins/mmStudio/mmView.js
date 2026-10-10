@@ -76,9 +76,9 @@ const MmView = (() => {
 
 	const chOf = c => c != null && c >= 0 && c <= 15 ? c : null;
 	function globPage(slot, g) {
-		const c = g.channels || {}, i = g.controlIn || {};
+		const c = g.channels || {}, i = g.controlIn || {}, o = g.controlOut || {};
 		return { slot, base: chOf(c.base), span: c.span ?? 0, auto: chOf(c.auto), multiTrig: chOf(c.multiTrig), multiMap: chOf(c.multiMap),
-			clockIn: i.tempoSync === 1, transportIn: i.transport === 1 };
+			clockIn: i.tempoSync === 1, transportIn: i.transport === 1, clockOut: o.clock !== 0, transportOut: o.transport !== 0, programChangeOut: !!o.programChange };
 	}
 	/* B-051: the channel the machine takes track t's CCs, mutes and notes on, or null (elektronData::mmTrackChannel,
 	   measured on OS 1.32B: base + t while t < CHANNEL SPAN and base + t is 0-14; channel 16 reaches no track) */
@@ -177,8 +177,9 @@ const MmView = (() => {
 		legato: (v, c) => [[["tracks", c.t, "leg", { amp: "amp", filter: "flt", lfo: "lfo" }[c.env]], c.on ? 1 : 0]],
 		portamento: (v, c) => [[["tracks", c.t, "port"], c.v === "always" ? 0 : 1]],
 		routing: (v, c) => [[["routing"], c.v]],
-		globalMidi: (v, c) => ["base", "span", "auto", "multiTrig", "multiMap", "clockIn", "transportIn"].filter(k => c[k] !== undefined)
-			.map(k => [["glob", k], k === "span" ? c[k] : k === "clockIn" || k === "transportIn" ? !!c[k] : chOf(c[k])]),
+		globalMidi: (v, c) => ["base", "span", "auto", "multiTrig", "multiMap", "clockIn", "transportIn", "clockOut", "transportOut", "programChangeOut"]
+			.filter(k => c[k] !== undefined).map(k => [["glob", k], k === "span" ? c[k] : typeof c[k] === "boolean" ? c[k] : chOf(c[k])]),
+		globalReset: () => [],
 		midiTrack: (v, c) => [...(c.ch != null ? [[["midi", c.t, "ch"], c.ch + 1]] : []), ...(c.cc ? [[["midi", c.t, "cc"], c.cc.map(Number)]] : [])],
 		step: (v, c) => stepWrites(v, c.t, c.s, c.v),
 		slide: (v, c) => [[[...trackPath(c.t), "slide", c.s], !!c.on]],
@@ -448,7 +449,7 @@ const MmView = (() => {
 	const OPS = {
 		kit: ["level", "route", "input", "param", "trigPos", "legato", "portamento", "machine", "clearSound", "copySound", "pasteSound", "params",
 			"assign", "multiEnv", "multiTrig", "kitName"],
-		global: ["routing", "midiTrack", "globalMidi", "multiMap", "multiMapSplit", "multiMapDelete"],
+		global: ["routing", "midiTrack", "globalMidi", "globalReset", "multiMap", "multiMapSplit", "multiMapDelete"],
 		song: ["rowSet", "rowInsert", "rowDelete", "rowMove", "copyRow", "pasteRow"],
 		library: ["patCopy", "patPaste", "patCopyTo", "patClear", "kitCopy", "kitPaste", "kitCopyTo", "kitClear", "kitRename"]
 	};

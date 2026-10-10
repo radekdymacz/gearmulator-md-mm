@@ -22,6 +22,7 @@
 #include "deskCore/deskPacer.h"
 #include "deskWire/mdWire.h"
 
+#include "elektronData/factoryGlobals.h"
 #include "elektronData/mdCommands.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
@@ -2552,6 +2553,60 @@ namespace
 		check(firstCtrl == ed::MdGlobal::g_keymapStart && lastMeaningful == ed::MdGlobal::g_keymapStop, "the transport targets are 144-145");
 	}
 
+	// B-051, F3: the global the machine ships with, read from a fresh machine (every slot): elektronData::mdFactoryGlobal
+	// must be it (GLOBAL › Reset to defaults writes it). FACTORY_PRINT=1 prints the dump as the C++ table.
+	void factoryGlobal(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("== the factory global");
+		Machine m(_rom, _romName);
+		for(uint8_t slot = 0; slot < ed::MdGlobal::g_slots; ++slot)
+		{
+			const auto dump = m.request(ed::mdGlobalRequest(slot), ed::g_mdGlobalDump);
+			auto g = ed::decodeMdGlobal(dump);
+			require(g.has_value(), "global " + std::to_string(slot + 1) + " read");
+			if(slot == 0 && std::getenv("FACTORY_PRINT"))
+			{
+				g->position = 0;
+				const auto bytes = ed::encodeMdGlobal(*g);
+				std::printf("  MD factory global dump (%zu bytes):", bytes.size());
+				for(size_t i = 0; i < bytes.size(); ++i) std::printf("%s0x%02x,", i % 16 ? " " : "\n    ", bytes[i]);
+				std::printf("\n");
+			}
+			check(*g == ed::mdFactoryGlobal(slot), "global " + std::to_string(slot + 1) + " of a fresh machine is elektronData::mdFactoryGlobal");
+		}
+	}
+
+	// B-051, F3: GLOBAL › Reset to defaults. The base channel and TEMPO OUT changed, then globalReset: the active global
+	// reads back as the factory one, and a mute reaches each of the 16 tracks.
+	void globalReset(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("== GLOBAL › Reset to defaults");
+		Rig rig(_rom, _romName);
+		auto& desk = rig.desk();
+		rig.page(R"({"op":"ready"})");
+		require(rig.runUntil([&] { return desk.isReady() && desk.documents().global.has_value(); }, 30000), "the global is read");
+		const auto slot = desk.documents().global->position;
+		rig.page(R"({"op":"globalSet","field":"baseChannel","v":5,"id":1201})");
+		rig.page(R"({"op":"globalSet","field":"tempoOut","on":true,"id":1202})");
+		const bool changed = rig.runUntil([&] { const auto& g = desk.documents().global; return g && g->baseChannel == 5 && (g->syncFlags & ed::mdGlobalBits::g_tempoOut); }, 15000);
+		check(changed, "base channel 6-9 and TEMPO OUT read back");
+		rig.page(R"({"op":"globalReset","id":1203})");
+		check(resultOk(rig), "globalReset taken");
+		const bool reset = rig.runUntil([&] { const auto& g = desk.documents().global; return g && *g == ed::mdFactoryGlobal(slot); }, 15000);
+		check(reset, "the active global reads back as the factory global (GLOBAL " + std::to_string(slot + 1) + ")");
+		rig.run(1500);
+		int landed = 0;
+		for(int t = 0; t < 16; ++t)
+		{
+			rig.page("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":true,\"id\":" + std::to_string(1210 + t) + "}");
+			if(resultOk(rig) && rig.runUntil([&] { return rig.telemetry().mutes >= 0 && (rig.telemetry().mutes >> t & 1); }, 2000))
+				++landed;
+			rig.page("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":false,\"id\":" + std::to_string(1230 + t) + "}");
+			rig.runUntil([&] { return rig.telemetry().mutes >= 0 && !(rig.telemetry().mutes >> t & 1); }, 2000);
+		}
+		check(landed == 16, "after the reset a mute reaches each track (" + std::to_string(landed) + " of 16)");
+	}
+
 	// 0.3.5, the Song page's playhead: the song row the page is told (telemetry songRow, RAM 0x2b18f5) is the row the
 	// machine plays. A song A02, A03 x2, A04, LOOP to row 2 (forever), END, short patterns, SONG mode, PLAY: at
 	// the middle of each pattern pass the row's pattern is the pattern that plays, and the rows go 1 2 2 3, then
@@ -4030,6 +4085,14 @@ int main(const int _argc, char** _argv)
 		{
 			keymapRange(rom, romPath);
 			std::printf("mdDeskFirmwareTest keymap: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "factoryglobal")
+		{
+			factoryGlobal(rom, romPath);
+			globalReset(rom, romPath);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest factoryglobal: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "songrow")

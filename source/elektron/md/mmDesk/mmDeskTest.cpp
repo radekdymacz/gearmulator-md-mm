@@ -11,6 +11,7 @@
 
 #include "elektronData/mmCommands.h"
 #include "elektronData/mmDump.h"
+#include "elektronData/factoryGlobals.h"
 #include "elektronData/mmJson.h"
 #include "elektronData/mmValidate.h"
 
@@ -1636,6 +1637,11 @@ void memoryFields()
 
 int main(const int _argc, char** _argv)
 {
+	if(_argc > 2 && std::string(_argv[1]) == "--factory-global")	// B-051: the factory global of a slot as the contract writes it
+	{
+		std::puts(ed::json::write(ed::mmGlobalToJson(ed::mmFactoryGlobal(static_cast<uint8_t>(std::atoi(_argv[2]) & 7)))).c_str());
+		return 0;
+	}
 	if(_argc > 1 && std::string(_argv[1]) == "--write-schema")
 	{
 		checkContract(true);

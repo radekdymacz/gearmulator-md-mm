@@ -1216,7 +1216,7 @@
 			],
 			"mod": "",
 			"group": "Anywhere",
-			"does": "The machine's own settings, kept in its memory: MIDI channel, sync, the note map, routing (also the engine menu: GLOBAL…)",
+			"does": "The machine's own settings, kept in its memory: MIDI channels, sync and the rest (also the engine menu: GLOBAL…)",
 			"area": "Top bar"
 		},
 		{
@@ -1583,7 +1583,7 @@
 			],
 			"mod": "",
 			"group": "Anywhere",
-			"does": "The machine's MIDI settings, kept in its active global: the channels each track listens on, sync in (also the engine menu: GLOBAL…)",
+			"does": "The machine's own settings, kept in its memory: MIDI channels, sync and the rest (also the engine menu: GLOBAL…)",
 			"area": "Top bar"
 		},
 		{
