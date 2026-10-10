@@ -184,7 +184,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester A, 2026-10-08, M1, macOS 12, 0.3.4: "Glitch while P-locking still there, no improvement".
 - **To check:** this tester's Mac is already at 65-70 % CPU with upstream Gearmulator; the B-014 stream cut the extra work 5-7×, but the emulation's own load may leave no headroom on an M1; check the buffer size, whether the page graphics (still heavy for fast gestures) is the remaining cost, and measure with the rt-check on an M1-like budget.
 - **Fix (0.4.0, merged in main as `cba2ace1f`, branch `perf/step1-quick-wins`):** the CPU research's step 1 (L1, L11, L2b, L5), bit-exact: host work per frame MD -15 % stopped / -16 % playing, MM -19 % / -21 %; the worst buffer during edits -17 to -25 % (MD) and -19 to -27 % (MM) on an M4 Pro, from the headless rigs and firmware tests. Not yet run in a DAW or heard by ear on an M1. `GEARMULATOR_MDMM_SPEEDUPS=0` / Developer > Speed-ups off turns it off to compare.
-- **Status:** open (related: B-014, CPU research); step 1 is in 0.4.0 (in main), to be checked by tester A on an M1.
+- **Status:** fixed by 0.4.0 (emulation CPU step 1). Tester A, M1, macOS 12, 2026-10-10: about 13 % less CPU, and p-locks edit "perfectly while playing live", "all seems to run very smoothly". The cause was CPU headroom, as suspected.
 
 ## B-027 · Monomachine: a machine change reverts when going back to Sequence
 
