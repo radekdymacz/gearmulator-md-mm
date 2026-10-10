@@ -262,9 +262,8 @@ function(mdmm_plugin_targets)
 		# and of what links it, so a bump rebuilt both plug-ins whole, JUCE's modules included. They go to the files
 		# that use them instead: the format wrappers (VST3, AU, Standalone: the versions hosts read), the two of
 		# ours that name JucePlugin_VersionString (mdPluginProcessor.cpp, mdStandaloneApp.cpp through
-		# standaloneApp.h; mdRecordMenu.cpp is in the _Standalone target) and upstream's serverPlugin.cpp (the
-		# bridge's plug-in description, bridge/client/plugin.h). A file that names them without having them does
-		# not compile.
+		# standaloneApp.h; mdRecordMenu.cpp is in the _Standalone target). A file that names them without having
+		# them does not compile.
 		set(_mdmmJuceVersionDefinitions "")
 		set(_mdmmVersionDefinition "^(JucePlugin_Version(String|Code)?|PluginVersion(Major|Minor|Patch))=")
 		foreach(_mdmmProperty COMPILE_DEFINITIONS INTERFACE_COMPILE_DEFINITIONS)
@@ -293,7 +292,7 @@ function(mdmm_plugin_targets)
 		endforeach()
 	endforeach()
 	# both plug-ins have the same version; their shared files are compiled once per plug-in with these
-	set_property(SOURCE mdPluginProcessor.cpp mdStandaloneApp.cpp serverPlugin.cpp
+	set_property(SOURCE mdPluginProcessor.cpp mdStandaloneApp.cpp
 		APPEND PROPERTY COMPILE_DEFINITIONS ${_mdmmJuceVersionDefinitions})
 	unset(_mdmmJuceVersionDefinitions)
 	unset(_mdmmDefinitions)

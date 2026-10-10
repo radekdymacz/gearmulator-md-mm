@@ -134,7 +134,7 @@ if (-not $TestOnly) {
         'pluginTester'
     )
     if ($WithTests) {
-        $targets += @('baseLibBinaryStreamTest', 'bridgeLibTest', 'bridgeServerRomPoolTest',
+        $targets += @('baseLibBinaryStreamTest',
             'synthLibAudioTest', 'synthLibMidiQueueTest',
             'synthLibStateCaptureTest', 'mdLibTest', 'mdStateCaptureTest', 'mdMemoryFastLaneTest',
             'mdAudioQueueTest', 'mdAudioFirmwareTest', 'mdAudioIoLayoutTest', 'mdProcessorHooksTest',
@@ -170,7 +170,7 @@ if ($WithTests) {
         '--test-dir', $BuildDir,
         '-C', $Configuration,
         '--output-on-failure',
-        '--tests-regex', '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdLibTests|mdStateCaptureTest|mdMemoryFastLaneTest|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdWindowsPolicyTest|mdMachineMidiOutTest|mdMachineMidiOutFirmwareTest_(md|mm)|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
+        '--tests-regex', '^(baseLibBinaryStreamTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdLibTests|mdStateCaptureTest|mdMemoryFastLaneTest|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdWindowsPolicyTest|mdMachineMidiOutTest|mdMachineMidiOutFirmwareTest_(md|mm)|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
     )
     Invoke-Native -FilePath $ctest -Arguments @(
         '--test-dir', $BuildDir,

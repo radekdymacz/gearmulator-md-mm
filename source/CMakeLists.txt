@@ -32,16 +32,6 @@ include(macsetup.cmake)
 include(skins.cmake)
 include(exporttarget.cmake)
 
-# ----------------- network bridge
-
-add_subdirectory(ptypes EXCLUDE_FROM_ALL)
-add_subdirectory(networkLib EXCLUDE_FROM_ALL)
-add_subdirectory(bridge)
-
-# ----------------- MCP server
-
-# MCP server is always built, but can be enabled/disabled at runtime via plugin settings
-
 # ----------------- Juce based audio plugin dependencies
 
 set_property(GLOBAL PROPERTY USE_FOLDERS YES)

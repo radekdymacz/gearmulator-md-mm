@@ -12,20 +12,8 @@
 #include "midiports.h"
 #include "programChangeRouter.h"
 
-#include "bridgeLib/types.h"
-
 #include "synthLib/midiRoutingMatrix.h"
 #include "synthLib/plugin.h"
-
-namespace bridgeClient
-{
-	class RemoteDevice;
-}
-
-namespace bridgeLib
-{
-	struct PluginDesc;
-}
 
 namespace baseLib
 {
@@ -94,9 +82,6 @@ namespace pluginLib
 		ProgramChangeRouter& getProgramChangeRouter() { return m_programChangeRouter; }
 
 		virtual synthLib::Device* createDevice() = 0;
-		virtual bridgeClient::RemoteDevice* createRemoteDevice(const synthLib::DeviceCreateParams& _params);
-		virtual void getRemoteDeviceParams(synthLib::DeviceCreateParams& _params) const;
-		virtual bridgeClient::RemoteDevice* createRemoteDevice();
 		synthLib::Device* createDevice(DeviceType _type);
 
 		bool hasController() const
@@ -189,12 +174,7 @@ namespace pluginLib
 		std::string getConfigFile(bool _useFxFolder = false) const;
 		std::string getProductName(bool _useFxName = false) const;
 
-		void getPluginDesc(bridgeLib::PluginDesc& _desc) const;
-
 		void setDeviceType(DeviceType _type, bool _forceChange = false);
-		void setRemoteDevice(const std::string& _host, uint32_t _port);
-		const auto& getRemoteDeviceHost() const { return m_remoteHost; }
-		const auto& getRemoteDevicePort() const { return m_remotePort; }
 
 		auto getDeviceType() const { return m_deviceType; }
 
@@ -281,9 +261,6 @@ namespace pluginLib
 		ExternalMidi m_externalMidi;
 		BypassBuffer m_bypassBuffer;
 		DeviceType m_deviceType = DeviceType::Local;
-		std::string m_remoteHost;
-		uint32_t m_remotePort = 0;
-		bridgeLib::SessionId m_remoteSessionId;
 		synthLib::MidiRoutingMatrix m_midiRoutingMatrix;
 		std::string m_programName;
 		std::unique_ptr<MidiLearnTranslator> m_midiLearnTranslator;

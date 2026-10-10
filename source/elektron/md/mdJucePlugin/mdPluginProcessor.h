@@ -69,7 +69,6 @@ namespace mdJucePlugin
 
 	    jucePluginEditorLib::PluginEditorState* createEditorState() override;
 	    synthLib::Device* createDevice() override;
-		void getRemoteDeviceParams(synthLib::DeviceCreateParams& _params) const override;
 
 	    pluginLib::Controller* createController() override;
 		// MIDI mapping switched off (deskHost::midiMappingEnabled): no translator, so no learn code on the MIDI threads

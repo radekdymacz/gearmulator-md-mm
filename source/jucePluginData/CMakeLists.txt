@@ -33,8 +33,6 @@ set(RMLSOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/tus_settings.rcss
 	${CMAKE_CURRENT_SOURCE_DIR}/tus_settings_dspaudio.rml
 	${CMAKE_CURRENT_SOURCE_DIR}/tus_settings_dspaudio.rcss
-	${CMAKE_CURRENT_SOURCE_DIR}/tus_settings_dspbridge.rml
-	${CMAKE_CURRENT_SOURCE_DIR}/tus_settings_dspbridge.rcss
 	${CMAKE_CURRENT_SOURCE_DIR}/tus_settings_gui.rml
 	${CMAKE_CURRENT_SOURCE_DIR}/tus_settings_gui.rcss
 	${CMAKE_CURRENT_SOURCE_DIR}/tus_settings_midi.rml

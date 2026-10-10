@@ -16,12 +16,13 @@ namespace md
 		CompleteTail
 	};
 
-	// DeviceCreateParams::customData is serialized by the remote-device bridge. Keep the
-	// legacy zero value as Machinedrum, while tagged values make new callers explicit.
+	// DeviceCreateParams::customData tells md::Device the model (upstream's remote-device bridge also
+	// serialized it; deleted in 0.5). Keep the legacy zero value as Machinedrum, while tagged values
+	// make new callers explicit.
 	static constexpr uint32_t g_deviceCustomDataMachinedrum = 0x4d440001; // "MD"
 	static constexpr uint32_t g_deviceCustomDataMonomachine = 0x4d4d0001; // "MM"
 	// Builds made during scheduler development serialized three now-retired feature
-	// bits in the low byte. Ignore them when reading old bridge parameters; current
+	// bits in the low byte. Ignore them when reading old parameters; current
 	// callers serialize only the model because there is one supported execution path.
 	static constexpr uint32_t g_legacyDeviceFeatureMask = 0x0000000e;
 	static constexpr uint32_t g_deviceCustomDataModelMask = ~g_legacyDeviceFeatureMask;

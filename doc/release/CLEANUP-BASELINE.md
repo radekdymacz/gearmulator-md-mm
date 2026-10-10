@@ -196,3 +196,29 @@ One flaky test: `mdFirstStartFirmwareTest` failed 2 of 5 full ctest runs on thes
 and 1 of 10 runs alone; it passed every other time, also on the same build. When it fails, the second start goes
 "booting > ready" with 1 LCD frame and 0 resets, so the page never sees "animating". No deleted code is linked
 into it; it looks like a timing race in the first-start lifecycle that load makes likelier. Watch it in Phase 3.
+
+## After the bridge removal (Radek, 2026-10-10), branch `cleanup/no-bridge`
+
+Upstream's DSP bridge is gone: `source/bridge` (bridgeLib, client, server), `source/networkLib`, `source/ptypes`,
+the remote device in jucePluginLib's Processor (`createRemoteDevice`, `getRemoteDeviceParams`, `setRemoteDevice`,
+the remote host, port and session id, the reconnect in `recoverInvalidDevice`, `DeviceType::Remote`), the REMO
+chunk writer, the settings page's DSP bridge UI (`settingsDspBridge.*`, `tus_settings_dspbridge.*`), the server
+list in `PluginEditorState`, the per-product `ServerPlugin` libraries and `serverPlugin.cpp` (juce.cmake), and the
+two tests of deleted code with their entries in the build scripts and workflows. Nothing of it is built or linked:
+the build tree has no bridge, networkLib or ptypes target, and the six editor binaries have none of their symbols.
+
+**Old projects:** a state saved by an upstream build with the bridge on starts with a REMO chunk (device type,
+host, port). It still loads, on the local device: the chunk is accepted and its payload ignored (any version, a
+damaged payload too), the chunks after it are read, and a save writes no REMO chunk. `mdProcessorHooksTest`
+proves it with crafted states (as upstream wrote it, damaged, empty, newer version) on a synthetic device and on
+both editors' processors.
+
+| | Before (`648af9118`, main) | After |
+|---|---|---|
+| Goldens | 24 of 24 | 24 of 24, same file, speed-ups on and off (gate stage 5 on a fresh `scripts/mdmm-dev.sh` tree) |
+| ctest (gate stage 2, both ROMs) | 156 names | 154: the same names minus `bridgeLibTest` and `bridgeServerRomPoolTest` (deleted with the bridge); `mdProcessorHooksTest` has the old-remote-state case. One red: `mdFirstStartFirmwareTest` at load 41 (B-052, the same signature: "booting > ready", no "animating"); alone 3 of 5 green at load 80 to 140 |
+| Identities (bundles, IDs, AU codes, VST3 class IDs, version) | section 4 | identical, read from the new bundles |
+| Lines in the diff | | 19,824 removed, 144 added (162 files) |
+| C/C++/ObjC lines of the repository (without freetype, lunasvg) | 1,530,976 | 1,511,634 (-19,342: ptypes 14,119, bridge 3,245, networkLib 862, the rest the remote paths, the settings page and the two tests) |
+| of which outside dsp56300, JUCE, RmlUi and mc68k | 239,958 | 220,616 |
+| of which `source/elektron` | 109,032 | 108,350 (the two bridge tests, `serverPlugin.cpp`, the remote-device override; the new test added) |
