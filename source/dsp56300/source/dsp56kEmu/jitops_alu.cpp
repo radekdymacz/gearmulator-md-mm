@@ -731,7 +731,10 @@ namespace dsp56k
 	{
 		const auto D = getFieldValue<Cmpm_S1S2, Field_d>(op);
 		const auto JJJ = getFieldValue<Cmpm_S1S2, Field_JJJ>(op);
-		const auto r = decode_JJJ_read_56(JJJ, !D);
+		auto r = decode_JJJ_read_56(JJJ, !D);
+		// alu_cmp takes the magnitude in place. A source that is the other accumulator comes back as its live
+		// register: copy it first, or "cmpm a,b" turns A into |A| for the rest of the block
+		r.toTemp();
 		alu_cmp(D, r64(r.get()), true);
 	}
 

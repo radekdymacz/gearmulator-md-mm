@@ -1357,6 +1357,29 @@ namespace dsp56k
 		{
 			verify(dsp.sr_test(CCR_C));
 		});
+
+		// The source is the other accumulator: cmpm compares magnitudes but leaves both accumulators as they were.
+		// The tfr in the same block reads the source again, so a JIT that took |A| in the live register shows here
+		// (the copy came back as 5, not -5). Raw opcodes with JJJ=000, the encoding of the other accumulator (the
+		// assembler writes JJJ=001 for "cmpm a,b"; tfr: see UnitTests::tfr).
+		for(const bool bIsDest : {true, false})
+		{
+			constexpr auto minusFive = static_cast<TReg56::MyType>(0xff'ffffff'fffffb);
+			runTest([&]()
+			{
+				dsp.sr_clear(CCR_C);
+				dsp.setALU(!bIsDest, TReg56(minusFive));							// source: -5
+				dsp.setALU(bIsDest , TReg56(static_cast<TReg56::MyType>(3)));	// destination: 3
+				emit(bIsDest ? 0x20000f : 0x200007);	// cmpm a,b / cmpm b,a
+				emit(bIsDest ? 0x200009 : 0x200001);	// tfr a,b / tfr b,a
+			},
+			[&]()
+			{
+				verify(dsp.sr_test(CCR_C));		// |3| - |-5| borrows
+				verify(dsp.aluA().var == minusFive);
+				verify(dsp.aluB().var == minusFive);
+			});
+		}
 	}
 
 	void UnitTests::dec()
