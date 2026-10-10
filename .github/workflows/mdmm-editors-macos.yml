@@ -167,7 +167,6 @@ jobs:
       - name: Build the host
         run: |
           set -euo pipefail
-          git submodule update --init --depth 1 source/JUCE
           host="$(./scripts/macos/build_vst3_host.sh "${RUNNER_TEMP}/vst3host" | sed -n 's/^VST3_HOST=//p')"
           app="${host%/Contents/MacOS/*}"
           mkdir -p "${RUNNER_TEMP}/out"

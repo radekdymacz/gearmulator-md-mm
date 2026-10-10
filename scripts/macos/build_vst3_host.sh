@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the minimal VST3 host of the start test (scripts/vst3EditorHost) on the fork's JUCE submodule and prints
+# Builds the minimal VST3 host of the start test (scripts/vst3EditorHost) on the repository's own JUCE (source/JUCE) and prints
 # VST3_HOST=<its binary> on stdout (for $GITHUB_ENV); everything else goes to stderr.
 #
 #   scripts/macos/build_vst3_host.sh <build dir>
@@ -13,9 +13,6 @@ if [[ -z "${SDKROOT:-}" ]]; then
 	export SDKROOT
 fi
 {
-	if [[ ! -f "${source_dir}/source/JUCE/CMakeLists.txt" ]]; then
-		git -C "${source_dir}" submodule update --init --depth 1 source/JUCE
-	fi
 	cmake -S "${source_dir}/scripts/vst3EditorHost" -B "${build_dir}" -DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 	cmake --build "${build_dir}" --config Release --parallel 4
