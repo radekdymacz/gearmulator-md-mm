@@ -61,6 +61,6 @@
 .sndhead .mutband{flex:1 1 auto;margin:0}
 @media (max-width:1400px){.genband{gap:12px;padding-inline:10px}.genbar{gap:10px}.genbar>.genband{padding:0}.gbt{min-width:0}.gbc .seg{gap:9px}.gkeys{gap:7px}.ghint{display:none}.genbar .pgkey{padding:0 7px}}
 @media (max-width:1340px){.genband{gap:8px}.genbar{gap:8px}.gkeys{gap:5px}.gbc{gap:4px}.gbc .seg{gap:6px;margin-right:0}.gbc .seg button{letter-spacing:.06em}.gv{padding:0 6px;min-width:50px}.genbar .pgkey{padding:0 6px}.genbar .ptog{margin-left:0}}
-@media (max-width:1500px){.genband:has(.gwrite) .gsum{display:none}}
-.th .nm:has(.gtag){gap:4px}
+@media (max-width:1500px){.genband .gwrite~.gsum{display:none}}
+.th .nm.tagged{gap:4px}
 .th .nm .gtag{font:10px var(--pix);font-style:normal;color:var(--ink);background:var(--lcd);padding:0 3px;border-radius:2px;margin-left:auto;flex:none;align-self:center;white-space:nowrap}

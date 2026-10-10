@@ -344,7 +344,8 @@ function renderSampler() {
    ${smpLoadCard(k)}</section>
    ${romTiles(k, sending)}`;
 	}
-	$("#main").innerHTML = `<div class="smpmain ${ram ? "ram" : ""}">${h}</div>`; syncControls(); redraw();
+	/* .setup: the page is the set-up card alone (a class, not :has(): macOS 12's WebKit 15 has none, B-054) */
+	$("#main").innerHTML = `<div class="smpmain ${ram ? "ram" : ""}${/^\s*<section class="card smpsetup"/.test(h) ? " setup" : ""}">${h}</div>`; syncControls(); redraw();
 }
 ED.rom = {
 	draw(g, W, H, c) {

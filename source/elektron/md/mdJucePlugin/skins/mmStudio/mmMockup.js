@@ -391,7 +391,29 @@ function soundRow(list, cls, o) {
 		return `<div class="sgcol${kind}">${c.map(x => o.group(x, cn, first(x), kind === " lone" ? o.lone(x) : "")).join("")}</div>`;
 	}).join("")}</div>`;
 }
-if (typeof module !== "undefined") module.exports = { soundRow };
+/* The rows as drawn (a journey's or scripts/mdmm-snap.py's check, B-054): in a row with screens the screens take the
+   row's free height, the title and the box line keep theirs. A problem each: a screen more than `slack` px below its
+   title or above its boxes (0.4.0 on WebKit 15: the title at the top of a tall row, an empty band, a short screen),
+   or screens of one page not as tall as each other. Rows laid out as wrapping boxes (a narrow window) are skipped. */
+function soundRowsCheck(root, slack = 12) {
+	const out = [], hs = [];
+	const r = e => e.getBoundingClientRect();
+	for (const row of root.querySelectorAll(".snd .sgrow:not(.flat)")) {
+		if (getComputedStyle(row).display !== "grid" || !row.getClientRects().length) continue;
+		for (const plot of row.querySelectorAll(".sg>.plot")) {
+			/* the title's words, not its header: a stretched header reaches down to the screen */
+			const sg = plot.parentElement, head = sg.querySelector(":scope>header h3"), boxes = sg.querySelector(":scope>.ctl,:scope>.sgline,:scope>.sgsel,:scope>.lfobody");
+			const name = (head && head.textContent.trim()) || "?", p = r(plot);
+			hs.push([name, Math.round(p.height)]);
+			if (head && p.top - r(head).bottom > slack) out.push(`${name}: screen ${Math.round(p.top - r(head).bottom)} px below its title`);
+			if (boxes && r(boxes).top - p.bottom > slack) out.push(`${name}: screen ${Math.round(r(boxes).top - p.bottom)} px above its boxes`);
+		}
+	}
+	const lo = Math.min(...hs.map(x => x[1])), hi = Math.max(...hs.map(x => x[1]));
+	if (hs.length && hi - lo > 2) out.push(`screens from ${lo} to ${hi} px tall: ${hs.map(x => x.join(" ")).join(", ")}`);
+	return { screens: hs.map(x => x[1]), problems: out };
+}
+if (typeof module !== "undefined") module.exports = { soundRow, soundRowsCheck };
 
 /* ---- 52-gen.js ---- */
 /* ===== GEN and MUTATE, the Monomachine's own (MM-PORT-PLAN.md d) =====
@@ -2392,7 +2414,7 @@ const gapC=s=>s%16===0&&s!==vis()[0]?"gap":"";
    ONE piano roll for the selected track (the height of the MD's 16-row grid), ENV/SLIDE/SWING rows, lock lane. */
 const ROLL_H=16*28+15*3;
 function th(t){const tr=trk(t),polyOff=S.mode==="poly"&&t!==S.sel&&t<6;return`<div class="th ${t===S.sel?"sel":""} ${S.ws==="seq"&&S.marks?.has(t)?"marked":""} ${trackSel(t)} ${audible(t)?"":"off"} ${polyOff?"poly-off":""}" data-sel="${t}">
- <div class="threw"><div class="sw"></div><div class="n ${t<6?"":"fill"}">${t<6?t+1:"M"+(t-5)}</div><div class="nm" title="${tr.name}"><b>${t<6?tr.m.replace("SWAVE-","SW-"):"CH"+String(tr.ch).padStart(2,"0")}</b>${S.ws==="seq"&&S.gen?`<i class="gtag" title="${genTip(t)}">${genTag(genSpec(t))}</i>`:""}</div>
+ <div class="threw"><div class="sw"></div><div class="n ${t<6?"":"fill"}">${t<6?t+1:"M"+(t-5)}</div><div class="nm${S.ws==="seq"&&S.gen?" tagged":""}" title="${tr.name}"><b>${t<6?tr.m.replace("SWAVE-","SW-"):"CH"+String(tr.ch).padStart(2,"0")}</b>${S.ws==="seq"&&S.gen?`<i class="gtag" title="${genTip(t)}">${genTag(genSpec(t))}</i>`:""}</div>
  <button class="ms m ${ARMED.has(t)?"prep":""}" ${ARMED.has(t)?`data-prep="${ARMED.get(t)?"X":"+"}"`:""} data-mute="${t}" aria-pressed="${tr.mute}" aria-label="Mute ${tLabel(t)}">M</button><button class="ms s" data-solo="${t}" aria-pressed="${tr.solo}" aria-label="Solo ${tLabel(t)}">S</button></div></div>`}
 function pageKeys(){return`<span class="pagectl rh"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`}
 function lockPicker(t){const midi=isMidiT(t),list=pagesOf(t),d=dockOf(t);if(!list.includes(S.lanePage))S.lanePage=list[0];
@@ -3774,7 +3796,7 @@ function renderPerform(){const pm=PMODES.find(p=>p[0]===S.mode),t=asgT(),tr=S.tr
     <div class="hint">On top of every track's own envelope. For no effect: ATK 0, DEC, SUS and REL at 127.</div></section>
    <section class="card asgcard"><header><h3>Assign · T${t+1} ${shortM(tr.m)}</h3><span class="seg" data-set="astrk">${[0,1,2,3,4,5].map(k=>`<button data-v="${k}" aria-pressed="${k===t}">${k+1}</button>`).join("")}</span></header>
     <span class="seg" data-set="astab">${Object.keys(A.tabs).map(k=>`<button data-v="${k}" aria-pressed="${S.asTab===k}">${k}</button>`).join("")}</span>
-    <div class="asgn">${joy?`<div class="joy" id="joy" title="Drag the stick. It springs back."><span class="cross"></span><span class="cross2"></span><small class="jl">L</small><small class="jr">R</small><small class="ju">U</small><small class="jd">D</small><span class="knobj" id="knobj" style="left:${50+S.joy.x*42}%;top:${50-S.joy.y*42}%"></span></div>`:""}
+    <div class="asgn${joy?"":" nojoy"}">${joy?`<div class="joy" id="joy" title="Drag the stick. It springs back."><span class="cross"></span><span class="cross2"></span><small class="jl">L</small><small class="jr">R</small><small class="ju">U</small><small class="jd">D</small><span class="knobj" id="knobj" style="left:${50+S.joy.x*42}%;top:${50-S.joy.y*42}%"></span></div>`:""}
      <div style="display:grid;gap:6px">${rows.map(asRow).join("")}
       ${S.asTab==="JOY RL"?`<button class="lkey" data-mirr="1" aria-pressed="${A.mirr}"><i class="led"></i>MIRR (left = −right)</button>`:""}
       ${S.asTab==="KEY"?`<span class="keyrow"><button class="lkey" data-ktrk="hpf" aria-pressed="${A.hpf}"><i class="led"></i>HPF tracks keys</button><button class="lkey" data-ktrk="lpf" aria-pressed="${A.lpf}"><i class="led"></i>LPF tracks keys</button></span>`:""}

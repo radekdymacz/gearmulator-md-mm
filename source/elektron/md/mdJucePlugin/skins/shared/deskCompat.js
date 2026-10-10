@@ -11,11 +11,14 @@
                                   A p%, transparent -> rgba(var(--ink-r), ..., p); A p%, B -> per channel
                                   calc(A * p + B * (1 - p)). Mixes of literal colours become literal colours.
      :focus-visible (WebKit 15.4) :focus, so a rule listing it (".x:hover, .x:focus-visible") is not dropped.
+     user-select                  -webkit-user-select beside it, where the engine reads only the prefixed one.
    It also adds structuredClone (WebKit 15.4) where it is missing (the Monomachine page copies plain documents).
    A modern engine keeps the stylesheets as written. ?compat=force in the page's address applies the rewrite
    anyway (to compare it with the original in a current browser). Pure text in, text out: deskCompatTest.js.
-   Left as they are (an older engine skips them, nothing breaks): :has() and subgrid (WebKit 15.4 / 16) in a few
-   alignment rules, scrollbar-gutter, overscroll-behavior, accent-color. */
+   Not rewritten: the stylesheets do without :has() and give each subgrid lines of its own first (B-054,
+   deskCompatTest.js, deskSoundLayoutTest.js); scrollbar-gutter, overscroll-behavior and accent-color an older engine
+   skips without a change to the layout. safari15() reads a stylesheet as WebKit 15 does, to see that in a current
+   engine (the journeys md-old-webkit / mm-old-webkit, scripts/mdmm-snap.py --safari15). */
 const DeskCompat = (() => {
 	const NAMED = { transparent: [0, 0, 0, 0], black: [0, 0, 0, 1], white: [255, 255, 255, 1] };
 	function hex(h) {
@@ -116,10 +119,28 @@ const DeskCompat = (() => {
 			return `${m};${name}-r:${c[0]}${i};${name}-g:${c[1]}${i};${name}-b:${c[2]}${i}`;
 		});
 	}
+	/* The stylesheet as WebKit 15 reads it, to see the page as macOS 12 does in a current engine (?compat=safari15,
+	   scripts/mdmm-snap.py --safari15, the Sound rows' journeys): subgrid is no value (the declaration is dropped, an
+	   earlier fallback stays) and a rule with :has() in its selector is dropped whole; with the colour rewrite above. */
+	function safari15(css) {
+		let out = "", pos = 0;
+		css = css.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(grid-template-(?:rows|columns)\s*:\s*)subgrid\b/g, "$1no-subgrid-in-webkit-15");
+		/* a style rule is "selector{declarations}" with no brace inside its declarations; an at-rule's block is walked */
+		const re = /([^{}]*)\{([^{}]*)\}/g;
+		let m;
+		while ((m = re.exec(css))) {
+			if (!m[1].includes(":has(")) continue;
+			out += css.slice(pos, m.index) + m[1].replace(/[^;{}]*$/, "");
+			pos = re.lastIndex;
+		}
+		return rewrite(out + css.slice(pos), { colorMix: true, focusVisible: true, userSelect: true });
+	}
 	function rewrite(css, need) {
 		let out = css;
 		if (need.colorMix && out.includes("color-mix(")) out = replaceMixes(addChannels(out));
 		if (need.focusVisible) out = out.replace(/:focus-visible\b/g, ":focus");
+		/* WebKit reads user-select with its prefix only (a drag on a value box would select the page's text) */
+		if (need.userSelect) out = out.replace(/(^|[{;\s])user-select\s*:\s*([\w-]+)/g, "$1-webkit-user-select:$2;user-select:$2");
 		return out;
 	}
 	/* a deep copy of plain data (objects, arrays, Maps, Sets, dates, typed arrays), as structuredClone gives */
@@ -136,25 +157,28 @@ const DeskCompat = (() => {
 		for (const k of Object.keys(v)) out[k] = clone(v[k], seen);
 		return out;
 	}
-	const api = { rewrite, mix, hex, clone, applied: [] };
+	const api = { rewrite, safari15, mix, hex, clone, applied: [] };
 	if (typeof document === "undefined" || typeof window === "undefined") return api;
 	if (typeof window.structuredClone !== "function") { window.structuredClone = v => clone(v); api.applied.push("structuredClone"); }
 	const supports = (...a) => { try { return !!(window.CSS && CSS.supports && CSS.supports(...a)); } catch (e) { return false; } };
-	const force = /[?&]compat=force\b/.test(location.search);
+	const old15 = /[?&]compat=safari15\b/.test(location.search), force = old15 || /[?&]compat=force\b/.test(location.search);
 	const need = {
 		colorMix: force || !supports("color", "color-mix(in srgb, red 50%, blue)"),
 		focusVisible: force || !supports("selector(:focus-visible)"),
+		userSelect: force || !supports("user-select", "none"),
 	};
-	if (!need.colorMix && !need.focusVisible) return api;
+	if (!need.colorMix && !need.focusVisible && !need.userSelect) return api;
+	const fix = css => old15 ? safari15(css) : rewrite(css, need);
+	if (old15) api.applied.push("safari15");
 	for (const el of [...document.querySelectorAll('style, link[rel="stylesheet"]')]) {
-		if (el.tagName === "STYLE") { el.textContent = rewrite(el.textContent, need); continue; }
+		if (el.tagName === "STYLE") { el.textContent = fix(el.textContent); continue; }
 		/* a page served as files (a dev host): the linked stylesheet, read and put in place as a <style> */
 		try {
 			const x = new XMLHttpRequest();
 			x.open("GET", el.href, false); x.send();
 			if (x.status !== 200 && x.status !== 0) continue;
 			const st = document.createElement("style");
-			st.textContent = rewrite(x.responseText, need);
+			st.textContent = fix(x.responseText);
 			el.replaceWith(st);
 		} catch (e) { /* stays as linked */ }
 	}

@@ -31,6 +31,15 @@ eq(C.rewrite(".a{background:linear-gradient(color-mix(in srgb,var(--ink) 70%,tra
 eq(C.rewrite(".b:hover,.b:focus-visible{x:1}", all), ".b:hover,.b:focus{x:1}", ":focus-visible becomes :focus");
 eq(C.rewrite(".b:focus-visible{x:1}", { colorMix: true }), ".b:focus-visible{x:1}", "only what the engine lacks is rewritten");
 eq(C.rewrite("a{color:red}", all), "a{color:red}", "a stylesheet without mixes is unchanged");
+eq(C.rewrite(".a{touch-action:none;user-select:none}.b{-webkit-user-select:text}", { userSelect: true }), ".a{touch-action:none;-webkit-user-select:none;user-select:none}.b{-webkit-user-select:text}",
+	"user-select gets its prefixed twin (a prefixed one is left alone)");
+
+/* WebKit 15 as a current engine can show it (?compat=safari15, scripts/mdmm-snap.py --safari15) */
+eq(C.safari15(".a{display:grid;grid-template-rows:auto 1fr;grid-template-rows:subgrid}"), ".a{display:grid;grid-template-rows:auto 1fr;grid-template-rows:no-subgrid-in-webkit-15}",
+	"subgrid is no value: the earlier lines stay");
+eq(C.safari15(".x{a:1}.b:has(.c),.d{e:2}.f{g:3}"), ".x{a:1}.f{g:3}", "a rule with :has() goes whole (a selector list with it too)");
+eq(C.safari15("@media (max-width:9px){.p{q:1}.b:has(i){e:2}}"), "@media (max-width:9px){.p{q:1}}", "inside an at-rule too");
+eq(C.safari15("/* .b:has(x){} */.b:focus-visible{c:color-mix(in srgb,#000 50%,#fff)}"), ".b:focus{c:rgba(128, 128, 128, 1)}", "with the colour rewrite; comments go");
 
 const v = { a: [1, { b: 2 }], m: new Map([["k", { z: 1 }]]), d: new Date(5), u: new Uint8Array([1, 2]), inf: Infinity, n: null };
 const c = C.clone(v);
@@ -48,6 +57,11 @@ for (const f of ["mdStudio/mdDesk.css", "mmStudio/mmStudio.css"]) {
 	const missing = [...used].filter(n => !new RegExp(n + "-r:").test(out));
 	check(missing.length === 0, `${f}: every variable in a mix has channels${missing.length ? " (missing " + missing.join(", ") + ")" : ""}`);
 	check(!/:focus-visible/.test(out), `${f}: no :focus-visible left`);
+	/* B-054: what WebKit 15 does not read is never what lays a page out: no :has() rule (a class from the markup
+	   instead), each subgrid after lines of its own (deskSoundLayoutTest.js); the journeys md-old-webkit and
+	   mm-old-webkit measure every view both ways */
+	const has = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]*:has\([^{}]*)\{/g)].map(m => m[1].trim());
+	check(!has.length, `${f}: no :has() rule${has.length ? " (" + has.join(", ") + ")" : ""}`);
 }
 console.log(failures ? `FAIL (${failures})` : "PASS");
 process.exit(failures ? 1 : 0);

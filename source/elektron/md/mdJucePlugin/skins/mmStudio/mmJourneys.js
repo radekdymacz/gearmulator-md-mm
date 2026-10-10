@@ -1312,6 +1312,25 @@ const MmJourneys = (() => {
 				screen: () => ok($1("#genband .gkeys").getBoundingClientRect().right <= $1("#genband").getBoundingClientRect().right + 1, "R and Defaults cut off") },
 			{ say: "the GEN bar", act: async () => { await sleep(800); shot("gen-mm"); Journey.snapshot("gen-mm"); }, hold },
 			{ say: "done", act: () => shot("done") }] };
+	/* B-054: every view, as macOS 12's WebKit 15 lays it out (Journey.viewJourneys: mm-old-webkit in every run,
+	   mm-shots-views for scripts/mdmm-snap.py --safari15) */
+	const ws = (name, extra, w = name) => ({ name, open: async u => { u.click(tab(w)); await until(() => S().ws === w, 3000); if (extra) await extra(u); } });
+	const esc1 = async u => { u.key("Escape"); await sleep(200); };
+	const viewJs = Journey.viewJourneys("mm", [
+		ws("seq"), ws("seq-arp", async u => { u.click('[data-dock="arp"]'); }, "seq"), ws("sound", async u => { u.click(tab("seq")); await sleep(200); u.click('[data-dock="locks"]'); u.click(tab("sound")); await sleep(200); u.click(rail(0)); }),
+		ws("mix"), ws("perform"), ws("song"),
+		{ name: "kits", open: u => u.click("#kitf"), close: esc1 },
+		{ name: "patterns", open: u => u.click("#pat"), close: esc1 },
+		{ name: "global", open: u => u.click("#globkey"), close: esc1 },
+		{ name: "audio", needs: () => { const o = $1('#engsel option[value="audio"]'); return o && !o.hidden && !o.disabled ? null : "no AUDIO / MIDI here (the plug-in in a host)"; }, open: u => { blur(); u.key(","); }, close: esc1 },
+		{ name: "syx-import", needs: syxImportJ.needs, open: async u => { u.click("#kitf"); await sleep(300); u.click('#libpop [data-syx="import"]'); await until(() => syxKitIds().length > 0, 8000); },
+			close: async u => { $1('#syxpop [data-syxgo="close"]')?.click(); await sleep(200); await esc1(u); } },
+		{ name: "keys", open: u => { blur(); u.key("?", { shift: true }); }, close: esc1 },
+		{ name: "menu", open: u => Journey.menu.via(u), close: async () => closeDeskMenu() },
+		{ name: "step-menu", open: async u => { u.click(tab("seq")); await sleep(300); const t = [0, 1, 2, 3, 4, 5].find(x => trigsOf(x).length) ?? 0; const p = rollCell(t, trigsOf(t)[0] ?? 0); u.rightClick(p.c, {}, p.fx, p.fy); },
+			close: async () => { closeDeskMenu(); if (S().stepSel) clearSel(); } },
+		{ name: "rom-card", open: u => u.pick("engsel", "rom"), close: async u => { u.click('#bootcard [data-bootrom="close"]'); await sleep(300); } }
+	]);
 	/* I-008: the editor's menu (shared/deskJourney.js editorMenuJourney), as the Machinedrum's */
 	const editorMenuJ = Journey.editorMenuJourney("mm-top-editor-menu", "Monomachine Editor");
 	const all = [bootCard, firstBeat, spaceKey, tempoDrag, patNext, wsKeys, helpKeys, plate, undoRedo, gridRecord, slidePaint, lenKey, lockLane, arpDock, arpRange, trnKeys,
@@ -1320,7 +1339,7 @@ const MmJourneys = (() => {
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, syxImportMute, osCopyPaste, rotateUndo, faderUndo, tapTempoShift, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal, shotsSound];
+		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, syxImportMute, osCopyPaste, rotateUndo, faderUndo, tapTempoShift, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal, shotsSound, ...viewJs];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }

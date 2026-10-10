@@ -1106,6 +1106,23 @@ const MdJourneys = (() => {
 		],
 		async tidy() { if (menu.on()) closeDeskMenu(); }
 	};
+	/* B-054: every view, as macOS 12's WebKit 15 lays it out (Journey.viewJourneys: md-old-webkit in every run,
+	   md-shots-views for scripts/mdmm-snap.py --safari15) */
+	const ws = (name, extra) => ({ name, open: async u => { u.click(tab(name)); await until(() => S.ws === name, 3000); if (extra) await extra(u); } });
+	const esc1 = async u => { u.key("Escape"); await sleep(200); };
+	const viewJs = Journey.viewJourneys("md", [
+		ws("seq"), ws("sound", async u => { u.click(rail(soundTrack())); }), ws("mix"), ws("sampler"), ws("song"),
+		{ name: "kits", open: u => u.click("#kitf"), close: esc1 },
+		{ name: "patterns", open: u => u.click("#pat"), close: esc1 },
+		{ name: "global", open: u => u.pick("engsel", "global"), close: esc1 },
+		{ name: "audio", needs: () => { const o = $1('#engsel option[value="audio"]'); return o && !o.hidden && !o.disabled ? null : "no AUDIO / MIDI here (the plug-in in a host)"; }, open: u => u.pick("engsel", "audio"), close: esc1 },
+		{ name: "syx-import", needs: syxImportJ.needs, open: async u => { u.click("#kitf"); await sleep(300); u.click('#libpop [data-syx="import"]'); await until(() => syxKitIds().length > 0, 8000); },
+			close: async u => { $1('#syxpop [data-syxgo="close"]')?.click(); await sleep(200); await esc1(u); } },
+		{ name: "keys", open: u => { document.activeElement?.blur?.(); u.key("?", { shift: true }); }, close: esc1 },
+		{ name: "menu", open: u => menu.via(u), close: async () => closeDeskMenu() },
+		{ name: "step-menu", open: async u => { u.click(tab("seq")); await sleep(300); const t = soundTracks().find(x => trigsOf(x).length) ?? soundTrack(); u.rightClick(cell(t, trigsOf(t)[0] ?? 0)); }, close: async () => closeDeskMenu() },
+		{ name: "rom-card", open: u => u.pick("engsel", "rom"), close: async u => { u.click('#bootcard [data-bootrom="close"]'); await sleep(300); } }
+	]);
 	/* ---------- files dropped on the window (FOUNDATION.md, "Files dropped on the window") ---------- */
 	/* A drop from the Finder cannot be played from the page. The run's own files are dropped at a point of the page
 	   through the window's drop path from the native side on ("dropfiles <x> <y> syx|wav" in the page's log,
@@ -1159,7 +1176,7 @@ const MdJourneys = (() => {
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
 		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ,
 		syxImportMute, globalReset, shotsGlobal, shotsSound, shots, shotsSong, shotsImport, editorMenuJ, shotsMenu,
-		dropSyxJ, dropSampleJ];
+		dropSyxJ, dropSampleJ, ...viewJs];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */
 	/* Not in `all`: ?selftest=journey never runs them; ?selftest=demo-md-<name> does (Journey.demo), at a person's pace

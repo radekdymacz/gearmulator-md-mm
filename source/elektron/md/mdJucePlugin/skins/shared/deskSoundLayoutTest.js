@@ -72,6 +72,14 @@ check(mdCss.includes(shared("deskGenBar.css")) && mmCss.includes(shared("deskGen
 	"both stylesheets hold deskGenBar.css and deskSound.css as they are (run the sync scripts after a change)");
 const sub = shared("deskSound.css"), all = (sub.match(/grid-template-rows:subgrid/g) || []).length, guarded = (sub.match(/grid-template-rows:[^;}]*;grid-template-rows:subgrid/g) || []).length;
 check(all > 0 && all === guarded, `every subgrid in deskSound.css has its lines first, for an engine without subgrid (macOS 12): ${guarded} of ${all}`);
+/* B-054: 0.4.0's Monomachine Sound rows took subgrid with no lines of their own; WebKit 15 (macOS 12) then put each
+   title at the top of a tall row and a short screen at its foot. Every subgrid in both whole stylesheets has its own
+   lines first (the rows as drawn: soundRowsCheck in the Sound rows' journeys and scripts/mdmm-snap.py --check). */
+for (const [f, css] of [["mdDesk.css", mdCss], ["mmStudio.css", mmCss]]) {
+	const rules = [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]*)\{([^{}]*subgrid[^{}]*)\}/g)];
+	const bare = rules.filter(m => [...m[2].matchAll(/grid-template-(rows|columns)\s*:\s*subgrid/g)].some(d => !new RegExp(`grid-template-${d[1]}\\s*:(?!\\s*subgrid)[^;]+;[^}]*grid-template-${d[1]}\\s*:\\s*subgrid`).test(m[2])));
+	check(rules.length > 0 && !bare.length, `${f}: every subgrid has its own lines first (${rules.length} rules)` + (bare.length ? ": " + bare.map(m => m[1].trim()).join(", ") : ""));
+}
 
 console.log(failures ? `${failures} FAILED` : "all passed");
 process.exit(failures ? 1 : 0);

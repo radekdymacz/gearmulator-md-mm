@@ -4,6 +4,15 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-054 · macOS 12: the Sound page's rows stretched, the screens short at the foot (Monomachine 0.4.0)
+
+- **From:** Radek, 2026-10-10: Monomachine Editor 0.4.0, VST3 and AU in Ableton Live, macOS 12, window about 1620x1060.
+- **What happens:** on the Sound workspace each group's title sits at the top of a tall row, then an empty band, then a short screen (about 60 px) and its value boxes at the row's foot.
+- **Cause:** macOS 12's web view is WebKit 15: no `subgrid`, no `:has()`. 0.4.0's Sound rows gave each column `grid-template-rows:subgrid` and nothing else, so WebKit 15 dropped the declaration and the column's three implicit rows shared the row's height: the title's line took a third of the free height. The Machinedrum's 0.4.0 Sound page had the same rule (`.sgcol`). Measured with the WebKit 15 reading (below) at 1280x760, 1440x900, 1500x1200 and 1620x1060: the MM 0.4.0 screens 41-64 px tall (the LFOs 20-43 px) and as far below their titles, the MD 0.4.0 rows alike; main (slice 5, lines before each subgrid) lays out as a current engine at every size. A sweep of every view of both editors found four more places that used `:has()`: the Machinedrum's Sampler set-up card (not centred, the page cut to the card's height), the GEN tag beside each track's name on the rail (3 px off), the GEN bar's summary under 1500 px and the Monomachine's Perform assign rows without a joystick.
+- **Fix (0.5, `fix/mm-sound-height`):** no `:has()` in either stylesheet (a class from the markup: `.smpmain.setup`, `.nm.tagged`, `.asgn.nojoy`; the GEN bar by `.gwrite~.gsum`), `user-select` gets its `-webkit-` twin where the engine wants it (deskCompat.js). Checks: `DeskCompat.safari15()` reads a stylesheet as WebKit 15 does; the journeys `md-old-webkit` and `mm-old-webkit` (every run) open every view and compare its boxes both ways in the editor's own WebKit; `scripts/mdmm-snap.py --safari15 --size WxH --check` renders snapshots so and checks the Sound rows (`soundRowsCheck`); deskCompatTest.js fails on a `:has()` rule, deskSoundLayoutTest.js on a subgrid without lines of its own.
+- **To check:** on a Mac with macOS 12 (Safari 15) when one is at hand.
+- **Status:** main had the Sound rows fixed by slice 5; the rest fixed on `fix/mm-sound-height` for 0.5.
+
 ## B-053 · Monomachine: after picking a pattern that links another kit, the editor still counts the old kit as playing
 
 - **From:** the 0.5 slice-3 firmware test (`mmDeskFirmwareTest notelength`, first draft), 2026-10-10, on the emulator; not seen by a tester yet.

@@ -1592,7 +1592,7 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 /* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
 @media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}
 /* Set up sampling: the card, as one block, in the middle of the workspace (across and down) */
-#main>.smpmain:has(> .smpsetup){flex:1 1 auto;min-height:0;place-content:center;justify-items:center}
+#main>.smpmain.setup{flex:1 1 auto;min-height:0;place-content:center;justify-items:center}
 /* a fixed size, whatever its sentences say or whether the recorder-trigs row shows */
 .smpsetup{box-sizing:border-box;width:920px;max-width:100%;height:392px;grid-template-rows:auto 1fr auto;gap:18px}
 /* the flow, RECORD -> RAM n -> PLAY: two equal sides and the buffer between, every row a fixed height */
@@ -1844,8 +1844,8 @@ body.althold #clearLane{color:var(--led);box-shadow:inset 0 0 0 1px var(--led)}
 .sndhead .mutband{flex:1 1 auto;margin:0}
 @media (max-width:1400px){.genband{gap:12px;padding-inline:10px}.genbar{gap:10px}.genbar>.genband{padding:0}.gbt{min-width:0}.gbc .seg{gap:9px}.gkeys{gap:7px}.ghint{display:none}.genbar .pgkey{padding:0 7px}}
 @media (max-width:1340px){.genband{gap:8px}.genbar{gap:8px}.gkeys{gap:5px}.gbc{gap:4px}.gbc .seg{gap:6px;margin-right:0}.gbc .seg button{letter-spacing:.06em}.gv{padding:0 6px;min-width:50px}.genbar .pgkey{padding:0 6px}.genbar .ptog{margin-left:0}}
-@media (max-width:1500px){.genband:has(.gwrite) .gsum{display:none}}
-.th .nm:has(.gtag){gap:4px}
+@media (max-width:1500px){.genband .gwrite~.gsum{display:none}}
+.th .nm.tagged{gap:4px}
 .th .nm .gtag{font:10px var(--pix);font-style:normal;color:var(--ink);background:var(--lcd);padding:0 3px;border-radius:2px;margin-left:auto;flex:none;align-self:center;white-space:nowrap}
 #seqp>.genbar{flex:none}
 #seqp>.lanewrap{border-top:2px solid var(--print);margin-top:5px}
