@@ -4,6 +4,16 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-049 · Monomachine: the amp envelope the editor draws is not the one the machine plays
+
+- **From:** a tester on Discord, 2026-10-10 (version not stated, 0.4.0 or 0.3.5): "amp envelopes on monomachine seem to be all wrong".
+- **Checked first, all right:** the AMP page's names, order and CCs (ATK HOLD DEC REL DIST VOL PAN PORT, CC 56-63; the firmware's own AMP screen shows the same, `mmEditorProbeFirmwareTest lab`), the kit bytes they land in (0x19-0x1c for track 1, read back from the machine's kit after each CC), the codec, the page's mapping and what the plug-in sends (the same CC per page and index, live and over HW MIDI). The values reach the machine and come back as sent.
+- **Cause:** what the page drew. Every picture of the envelope (Sound › Amp, the Sequence page's TRIG SETUP plate and its "a gate sounds ≈ n steps", the light end of the roll's bars) used a guess: ATK, HOLD and DEC each linear, 127 = 16 steps, and REL drawn as a short fade. Measured on the firmware (one note per value, the output's level; the same on GND, SID, SWAVE, DPRO, FM+ and VO): ATK, DEC and REL are times, not the tempo's, and grow about twice every 8 to 10 values: ATK 64 reaches 90 % in 0.14 s (the page drew 1 s), DEC 64 is down 20 dB in 0.55 s (drawn 1 s), DEC 96 in 4.7 s (drawn 1.5 s), REL 126 takes 35 s and REL 127 never fades. Only HOLD was right: HOLD / 8 sixteenths of the tempo. So a short DEC looked long, a long one short, and ATK above about 40 looked far slower than it plays.
+- **Fix (branch fix/mm-envelope-pianoroll):** the measured times are data: `elektronData::mmAmpAttackMs`, `mmAmpHoldSixteenths`, `mmAmpFallMs` (DEC and REL share one curve), sent to the page in the catalogue as `ampEnvelope` (per value 0-127; schema and `mm-catalogue.json` updated). The page (`MmConvert.ampEnv`) draws all three pictures from it, in steps at the tempo, with the exponential fall, DEC 127 holding and REL 127 never fading; the dots drag to the value whose time is nearest. Help texts say the time scales.
+- **Tests:** `mmDeskFirmwareTest <MM ROM> ampenv` (new, ctest `mmAmpEnvelopeFirmwareTest`): ATK 48-96, HOLD 16 and 64 at 120 and 90 BPM, DEC 32-127 and REL 32-127 played on the firmware against the editor's times: passes; with the editor's old model 10 of 16 fail (ATK 64: 132 ms played, 1008 ms drawn). `mmConvertTest`: the page's model is the catalogue's, the times rise with the value, a dragged dot finds its value back.
+- **Not measured:** whether HOLD follows the pattern's speed multiplier (the page assumes it does not); FX machines (they need an input). What the tester heard as "wrong" was not described: the page's pictures are the likely reading, a reply asks.
+- **Status:** fixed on the branch, waiting on review and the tester.
+
 ## B-048 · macOS, Ableton Live: the AU opens the old Gearmulator panel, not the editor
 
 - **From:** a user on Discord, 2026-10-10, macOS, Ableton Live: loading the Machinedrum or Monomachine Editor as an AU opens "the original Gearmulator UI" instead of the editor page. The VST3 was not mentioned.

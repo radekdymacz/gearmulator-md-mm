@@ -21,6 +21,9 @@
 //   screens    the firmware's screen word across screens
 //   lab <script>      MM-P1 layout lab: panel/MIDI actions with dump diffs (see labMode)
 //   program <dir>     MM-P1 programmed corpus: random valid dumps through SYSEX RECV, read back
+//   ampenv "<atk,hold,dec,rel,gateMs> ..."   B-049: the AMP envelope one note plays (GND-SIN; AMPENV_MACHINE another
+//                     machine id, AMPENV_BPM a tempo, AMPENV_TAIL ms after the NOTE OFF, AMPENV_REF_FIRST the first
+//                     case's level as 100 %, AMPENV_TRACE the level every 50 ms)
 // Exits 77 (skip) without arguments.
 
 #include "mdFirmwareSession.h"
@@ -901,6 +904,89 @@ namespace
 			if(_n == md::panelControlName(static_cast<md::PanelControl>(i)))
 				return static_cast<md::PanelControl>(i);
 		return std::nullopt;
+	}
+
+	// ---- ampenv: the AMPLIFICATION envelope as the machine plays it (B-049) ---------------------------
+	// GND-SIN on track 1, the filter open, one note held for a while; the output's level in 1 ms windows,
+	// then the times it rises past 90 %, leaves 90 %, falls below 10 % and 1 %, before and after the NOTE OFF.
+	// args: a list of "atk,hold,dec,rel,gateMs" cases (default: a grid).
+	void ampEnvMode(const Bytes& _rom, const std::string& _cases)
+	{
+		auto m = boot(_rom);
+		const auto machine = static_cast<uint8_t>(std::getenv("AMPENV_MACHINE") ? std::atoi(std::getenv("AMPENV_MACHINE")) : 1);
+		m->send(elektronData::mmAssignMachine(0, machine, 1));
+		m->run(200);
+		m->send(elektronData::mmSetRouting(0, 1, 0));
+		m->run(200);
+		if(const char* bpm = std::getenv("AMPENV_BPM"))
+		{
+			m->send(elektronData::mmSetTempo(std::atof(bpm)));	// is any segment's time tempo-synced?
+			m->run(200);
+		}
+		for(const auto& [cc, v] : std::vector<std::pair<int, int>>{{7, 127}, {72, 0}, {73, 127}, {74, 0}, {75, 0}, {76, 0}, {77, 0}, {78, 0}, {79, 0}, {60, 0}, {61, 100}, {62, 64}, {63, 0}})
+			m->send({0xb0, static_cast<uint8_t>(cc), static_cast<uint8_t>(v)});
+		std::vector<std::array<int, 5>> cases;
+		{
+			std::istringstream in(_cases);
+			std::string c;
+			while(in >> c)
+			{
+				std::array<int, 5> a{};
+				std::sscanf(c.c_str(), "%d,%d,%d,%d,%d", &a[0], &a[1], &a[2], &a[3], &a[4]);
+				cases.push_back(a);
+			}
+		}
+		std::printf("ATK HOLD DEC REL gate(ms) | peak | onset (ms after NOTE ON) | then: t>90%% | t<90%% | t<10%% | t<1%% | level at off | off->10%% | off->1%%\n");
+		for(const auto& c : cases)
+		{
+			for(int i = 0; i < 4; ++i)
+				m->send({0xb0, static_cast<uint8_t>(56 + i), static_cast<uint8_t>(c[i])});
+			m->run(100);
+			const size_t start = m->left().size();
+			m->send({0x90, 60, 100});
+			m->run(c[4]);
+			const size_t off = m->left().size();
+			m->send({0x80, 60, 0});
+			m->run(std::getenv("AMPENV_TAIL") ? std::atof(std::getenv("AMPENV_TAIL")) : 6000.0);
+			const auto& l = m->left();
+			const auto& r = m->right();
+			std::vector<double> lev;
+			const size_t w = g_rate / 1000;
+			for(size_t i = start; i + w <= l.size(); i += w)
+			{
+				// RMS over the 10 ms around this millisecond (a 262 Hz sine: about 2.6 periods)
+				const size_t a0 = i >= 5 * w ? i - 5 * w : 0, a1 = std::min(l.size(), i + 5 * w);
+				double e = 0;
+				for(size_t j = a0; j < a1; ++j) e += static_cast<double>(l[j]) * l[j] + static_cast<double>(r[j]) * r[j];
+				lev.push_back(std::sqrt(e / static_cast<double>(2 * (a1 - a0))));
+			}
+			static double s_ref = 0;	// AMPENV_REF_FIRST: every case against the first case's level (a slow ATK may not finish)
+			double peak = lev.empty() ? 0 : *std::max_element(lev.begin(), lev.end());
+			if(std::getenv("AMPENV_REF_FIRST"))
+			{
+				if(s_ref == 0) s_ref = peak;
+				peak = s_ref;
+			}
+			const size_t offMs = (off - start) / w;
+			const auto first = [&](size_t from, auto pred) -> long { for(size_t i = from; i < lev.size(); ++i) if(pred(lev[i])) return static_cast<long>(i); return -1; };
+			const long onset = first(0, [&](double v) { return v >= 0.02 * peak; });
+			const long up = first(0, [&](double v) { return v >= 0.9 * peak; });
+			const long leave = up < 0 ? -1 : first(static_cast<size_t>(up), [&](double v) { return v < 0.9 * peak; });
+			const long d10 = up < 0 ? -1 : first(static_cast<size_t>(up), [&](double v) { return v < 0.1 * peak; });
+			const long d1 = up < 0 ? -1 : first(static_cast<size_t>(up), [&](double v) { return v < 0.01 * peak; });
+			const double atOff = offMs < lev.size() && peak > 0 ? lev[offMs] / peak : 0;
+			const long o10 = first(offMs, [&](double v) { return v < 0.1 * peak; });
+			const long o1 = first(offMs, [&](double v) { return v < 0.01 * peak; });
+			if(std::getenv("AMPENV_TRACE"))
+			{
+				std::printf("   trace (every 50 ms):");
+				for(size_t i = 0; i < lev.size(); i += 50) std::printf(" %.2f", peak > 0 ? lev[i] / peak : 0);
+				std::printf("\n");
+			}
+			const auto rel = [&](long v) { return v < 0 || onset < 0 ? -1 : v - onset; };
+			std::printf("%3d %4d %3d %3d %6d | %.5f | on %3ld | %5ld | %5ld | %5ld | %5ld | %.2f | %5ld | %5ld\n", c[0], c[1], c[2], c[3], c[4], peak,
+				onset, rel(up), rel(leave), rel(d10), rel(d1), atOff, o10 < 0 ? -1 : o10 - static_cast<long>(offMs), o1 < 0 ? -1 : o1 - static_cast<long>(offMs));
+		}
 	}
 
 	void labMode(const Bytes& _rom, const std::string& _script)
@@ -2151,6 +2237,7 @@ int main(const int _argc, char** _argv)
 		else if(mode == "boot") bootMode(rom);
 		else if(mode == "screens") screensMode(rom);
 		else if(mode == "lab") labMode(rom, dir);
+		else if(mode == "ampenv") ampEnvMode(rom, dir);
 		else if(mode == "program") programMode(rom, dir);
 		else if(mode == "statebytes") stateBytesMode(rom);
 		else if(mode == "recvflag2") recvFlag2Mode(rom);

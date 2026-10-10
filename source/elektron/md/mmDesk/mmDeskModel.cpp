@@ -1,10 +1,14 @@
 #include "mmDeskModel.h"
 
+#include <cmath>
+
 #include "deskCore/deskKinds.h"
 
 #include "elektronData/mmJson.h"
 #include "elektronData/mmMachines.h"
 #include "elektronData/mmValidate.h"
+
+#include <cmath>
 
 namespace mmDesk
 {
@@ -224,6 +228,21 @@ namespace mmDesk
 		lfo.set("pitchDests", strings(ed::mmPitchDests()));
 		c.set("lfo", std::move(lfo));
 		c.set("enumRule", "index = floor(value * n / 128); value = ceil(index * 128 / n)");
+		// B-049: the AMPLIFICATION envelope's times as the firmware plays them, per value 0-127 (ed::mmAmp*)
+		Value env = Value::object();
+		Value attack = Value::array(), hold = Value::array(), fall = Value::array();
+		const auto ms = [](const double _v) { return static_cast<int>(std::lround(_v)); };	// whole ms
+		for(int v = 0; v < 128; ++v)
+		{
+			const auto u = static_cast<uint8_t>(v);
+			attack.push(ms(ed::mmAmpAttackMs(u)));
+			hold.push(ed::mmAmpHoldSixteenths(u));
+			fall.push(v < 127 ? Value(ms(ed::mmAmpFallMs(u))) : Value(nullptr));
+		}
+		env.set("attackMs", std::move(attack));
+		env.set("holdSixteenths", std::move(hold));
+		env.set("fallMs", std::move(fall));
+		c.set("ampEnvelope", std::move(env));
 		c.set("slots", deskCore::slotCounts<MmModel>());
 		c.set("tracks", static_cast<int>(ed::MmKit::g_tracks));	// the synth tracks
 		return c;

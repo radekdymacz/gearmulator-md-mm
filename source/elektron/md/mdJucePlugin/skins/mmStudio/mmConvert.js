@@ -30,6 +30,9 @@ const MmConvert = (() => {
 	/* the catalogue's enumeration counts: lfo = the LFO page's PAGE DEST TRIG WAVE MULT, synth =
 	   {machine: {slot: n}} (none before the catalogue) */
 	let COUNTS = { lfo: [], synth: {} };
+	/* B-049: the AMPLIFICATION envelope's times as OS 1.32B plays them, per value (the catalogue's ampEnvelope,
+	   measured; none before the catalogue) */
+	let AMP = null;
 	/* takes the catalogue ("mm-desk/catalogue"); returns where the mockup's own tables (MACH, EN: its
 	   names and labels) differ from it, for a log line and the tests */
 	function useCatalogue(cat) {
@@ -48,6 +51,8 @@ const MmConvert = (() => {
 		}
 		/* the LFO page: PAGE, DEST (a page's parameters), TRIG, WAVE, MULT */
 		COUNTS = { lfo: [lfo.pages.length, cat.machines[0].synth.length, lfo.trigs.length, lfo.waves.length, lfo.mults.length], synth };
+		AMP = cat.ampEnvelope || null;
+		if (!AMP) off.push("no ampEnvelope: the amp envelope's times are not drawn");
 		return off;
 	}
 
@@ -67,6 +72,23 @@ const MmConvert = (() => {
 		if (baseRaw != null && eIdx(baseRaw, n) === v) return baseRaw;
 		return eVal(cl(v, 0, n - 1), n);
 	}
+	/* B-049: the AMP page's envelope in time. ATK, DEC and REL are times, not the tempo's; HOLD counts sixteenths of
+	   the tempo (15000 / bpm ms each). attackMs: the trig to 90 %. fallMs: DEC after HOLD and REL after a NOTE OFF, the
+	   ms to fall 20 dB (the fall is exponential), Infinity at 127 (DEC 127 holds until the NOTE OFF, REL 127 never
+	   fades). valueFor: the value whose time is nearest (a dragged handle). All null before the catalogue. */
+	const ampEnv = {
+		ready: () => !!AMP,
+		attackMs: v => AMP ? AMP.attackMs[cl(v)] : null,
+		holdMs: (v, bpm) => AMP ? AMP.holdSixteenths[cl(v)] * 15000 / (bpm || 120) : null,
+		fallMs: v => AMP ? (AMP.fallMs[cl(v)] ?? Infinity) : null,
+		valueFor(kind, ms, bpm) {
+			if (!AMP) return null;
+			const at = kind === "attack" ? ampEnv.attackMs : kind === "hold" ? v => ampEnv.holdMs(v, bpm) : ampEnv.fallMs;
+			let best = 0;
+			for (let v = 1; v < 128; v++) if (Math.abs(at(v) - ms) < Math.abs(at(best) - ms)) best = v;
+			return best;
+		}
+	};
 	const machineName = id => ID2M[id] ?? null;
 	const bit = (mask, t) => (mask >> t) & 1;
 
@@ -263,6 +285,6 @@ const MmConvert = (() => {
 
 	return {
 		kitToPage, kitName, kitEmpty, patternToPage, songToPage, rowToPage, rowToFw, mapToPage,
-		modToFw, modToPage, hasTrigs, machineName, useCatalogue, enumN, valueToPage, valueToFw, lockKey, parseLockKey, TABS
+		modToFw, modToPage, hasTrigs, machineName, useCatalogue, ampEnv, enumN, valueToPage, valueToFw, lockKey, parseLockKey, TABS
 	};
 })();

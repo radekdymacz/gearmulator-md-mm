@@ -135,13 +135,24 @@ ED.delay={draw(g,W,H){const e=V("EFX"),ink=cssv("--ink"),dt=Math.max(1,e[3])/256
 /* EFFECTS DBAS DWID: the delay's own band */
 ED.dflt={draw(g,W,H){const e=V("EFX");bandDraw(g,W,H,e[6]/127,Math.min(1,(e[6]+e[7])/127),"the repeats' band")},
  handles(W,H){const e=V("EFX");return[{x:e[6]/127*W,y:24,k:"DBAS",drag:x=>e[6]=clamp(Math.round(x/W*127))},{x:Math.min(1,(e[6]+e[7])/127)*W,y:24,k:"DWID",drag:x=>e[7]=clamp(Math.round(x/W*127-e[6]))}]}};
-ED.amp={seg(W){const a=V("AMP");return{a:a[0]/127*W*.22,h:a[1]/127*W*.26,d:a[2]/127*W*.3,r:a[3]/127*W*.2}},
- draw(g,W,H){const s=this.seg(W),ink=cssv("--ink"),T=18,B=H-10,y=v=>B-v*(B-T);grid(g,W,H);
-  const inf=V("AMP")[2]>=127,off=inf?W*.62:s.a+s.h*.6;g.strokeStyle=ink;g.lineWidth=2.2;g.beginPath();g.moveTo(0,y(0));g.lineTo(s.a,y(1));g.lineTo(s.a+s.h,y(1));if(inf){g.lineTo(off,y(1))}else{const k=Math.max(4,s.d);for(let x=0;x<=k;x+=2)g.lineTo(s.a+s.h+x,y(Math.exp(-3*x/k)));g.lineTo(s.a+s.h+k,y(0));g.lineTo(W,y(0))}g.stroke();
-  g.setLineDash([4,3]);g.lineWidth=1.5;g.beginPath();g.moveTo(off,y(1));for(let x=0;x<=Math.max(3,s.r);x+=2)g.lineTo(off+x,y(Math.exp(-3*x/Math.max(3,s.r))));g.stroke();g.setLineDash([]);
-  g.fillStyle=inkA(.5);g.fillRect(off,T,1,B-T);g.font="8px Silkscreen, monospace";g.fillStyle=ink;g.fillText("NOTE OFF",off+3,H-2);label(g,inf?"DEC 127: holds until note off":"AHDR · dashed = release")},
- handles(W,H){const s=this.seg(W),a=V("AMP"),T=18,B=H-10,y=v=>B-v*(B-T);return[{x:Math.max(5,s.a),y:y(1),k:"ATK",drag:x=>a[0]=clamp(Math.round(x/(W*.22)*127))},{x:s.a+s.h,y:y(1)+8,k:"HOLD",drag:x=>a[1]=clamp(Math.round((x-s.a)/(W*.26)*127))},
-  {x:s.a+s.h+Math.max(4,s.d)*.35,y:y(Math.exp(-1.05)),k:"DEC",drag:x=>a[2]=clamp(Math.round((x-s.a-s.h)/.35/(W*.3)*127))},{x:s.a+s.h*.6+Math.max(3,s.r)*.35,y:y(Math.exp(-1.05)),k:"REL",drag:x=>a[3]=clamp(Math.round((x-s.a-s.h*.6)/.35/(W*.2)*127))}]}};
+/* AMPLIFICATION ATK HOLD DEC REL (B-049): one note against steps after the trig at this tempo, as the firmware plays
+   it (ampTimes, the catalogue's measured times): ATK up, HOLD flat, DEC's exponential fall (DEC 127 holds), and from
+   a NOTE OFF REL's fall, dashed (REL 127 never fades). The NOTE OFF sits where HOLD ends (after a while when DEC is
+   127): a NOTE OFF starts REL from where the level is. */
+ED.amp={geo(W,H,c){const e=ampTimes(V("AMP"))||{at:0,ho:0,de:Infinity,re:Infinity},inf=e.de===Infinity,rinf=e.re===Infinity;
+  const off=e.at+e.ho+(inf?Math.max(2,(e.at+e.ho)*.4):0),gate=inf?off:e.at+e.ho+2*e.de,rel=off+(rinf?3:2*e.re);
+  const need=clamp(Math.ceil(Math.max(gate,rel)*1.08/4)*4,4,64),span=active&&active.c===c&&c&&c._span?Math.max(c._span,need):need;if(c)c._span=span;
+  const T=18,B=H-10;return{e,inf,rinf,off,span,T,B,X:s=>Math.min(W,s/span*W),S:x=>x/W*span,Y:v=>B-v*(B-T)}},
+ draw(g,W,H,c){const G=this.geo(W,H,c),e=G.e,ink=cssv("--ink");grid(g,W,H);
+  g.strokeStyle=ink;g.lineWidth=2.2;g.beginPath();g.moveTo(0,G.Y(0));g.lineTo(G.X(e.at),G.Y(1));g.lineTo(G.X(e.at+e.ho),G.Y(1));
+  if(G.inf)g.lineTo(G.X(G.off),G.Y(1));else{const d0=e.at+e.ho;for(let k=1;k<=32;k++){const u=k/32*2*e.de;g.lineTo(G.X(d0+u),G.Y(ampFall(u,e.de)))}g.lineTo(W,G.Y(0))}g.stroke();
+  g.setLineDash([4,3]);g.lineWidth=1.5;g.beginPath();g.moveTo(G.X(G.off),G.Y(1));const rs=G.rinf?G.span-G.off:2*e.re;for(let k=1;k<=32;k++){const u=k/32*rs;g.lineTo(G.X(G.off+u),G.Y(ampFall(u,e.re)))}g.stroke();g.setLineDash([]);
+  const xo=G.X(G.off);g.fillStyle=inkA(.5);g.fillRect(xo,G.T,1,G.B-G.T);g.font="8px Silkscreen, monospace";g.fillStyle=ink;g.fillText("NOTE OFF",Math.min(xo+3,W-44),H-2);
+  label(g,!AENV()?"AHDR":(G.inf?"DEC 127 holds to the note off":"AHDR")+(G.rinf?" · REL 127 never fades":" · dashed = release")+" · "+G.span+" steps")},
+ handles(W,H,c){const G=this.geo(W,H,c),e=G.e,a=V("AMP");if(!AENV())return[];const set=(i,v)=>{if(v!=null)a[i]=v};
+  return[{x:Math.max(5,G.X(e.at)),y:G.Y(1),k:"ATK",drag:x=>set(0,ampValue("attack",G.S(x)))},{x:G.X(e.at+e.ho),y:G.Y(1)+8,k:"HOLD",drag:x=>set(1,ampValue("hold",G.S(x)-e.at))},
+   {x:G.inf?Math.min(W-5,G.X(G.off)):G.X(e.at+e.ho+e.de),y:G.Y(G.inf?1:.1),k:"DEC",drag:x=>set(2,x>=W-3?127:Math.min(126,ampValue("fall",G.S(x)-e.at-e.ho)))},
+   {x:G.rinf?W-5:G.X(G.off+e.re),y:G.Y(G.rinf?1:.1),k:"REL",drag:x=>set(3,x>=W-3?127:Math.min(126,ampValue("fall",G.S(x)-G.off)))}]}};
 ED.flt={resp(u,env){const f=V("FLT"),b=Math.min(1,(f[0]+(env?f[6]:0))/127),w=(f[1]+(env?f[7]:0))/127,lp=Math.min(1,b+w);let d=0;if(u<b)d-=Math.pow((b-u)*7,2);if(u>lp)d-=Math.pow((u-lp)*7,2);d+=f[2]/127*1.6*Math.exp(-Math.pow((u-b)*26,2))+f[3]/127*1.6*Math.exp(-Math.pow((u-lp)*26,2));return d},
  draw(g,W,H){grid(g,W,H);const f=V("FLT");if(f[6]||f[7])line(g,W,x=>clamp(H/2+8-this.resp(x/W,1)*(H/4),6,H-6),inkA(.55),1.5,[5,4]);line(g,W,x=>clamp(H/2+8-this.resp(x/W)*(H/4),6,H-6),cssv("--ink"),2.2);label(g,"base + width"+(f[6]||f[7]?" · dashed = env peak":""))},
  handles(W,H){const f=V("FLT"),b=f[0]/127,lp=Math.min(1,b+f[1]/127),yy=u=>clamp(H/2+8-this.resp(u)*(H/4),6,H-6);
@@ -175,7 +186,7 @@ const SND_TIP={uni:"The base saw (middle) and the unison pair either side: UNIW 
  comp:"The compressor, in to out (dashed = unchanged): THRS where it starts (sideways), GAIN after it (up), RAT how much (127 = a limiter).",
  sweep:"The sweep over time: around DEL (CNTR on the phaser) by DEP, SPD on the rail. Drag the dots.",
  carrier:"The ring modulator's carrier, sine to triangle (WAVE, the rail).",
- amp:"The level after a trig: ATK rises, HOLD keeps it (no NOTE OFF needed), DEC falls, REL after the note off (dashed). Drag the dots.",
+ amp:"The level after a trig, in steps at this tempo, as the Monomachine plays it: ATK rises (64 ≈ 0.14 s), HOLD keeps it for HOLD/8 steps (no NOTE OFF needed), DEC falls (64 ≈ 0.55 s to -20 dB; 127 holds to the NOTE OFF), REL falls after the NOTE OFF (dashed; 127 never fades). ATK, DEC and REL are times: each 8 more about doubles them. Drag the dots.",
  dist:"Distortion, in to out (dashed = clean). Drag the dot up or down.",
  pan:"The track in the stereo field: PAN sideways, VOL up. Drag the dot.",
  flt:"The 24 dB gap filter: BASE is the high-pass, WDTH the gap to the low-pass, the dots up for HPQ and LPQ. Dashed: where the envelope takes it. Both track the note.",

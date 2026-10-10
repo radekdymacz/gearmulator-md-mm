@@ -107,6 +107,12 @@ function(mdmm_add_lib_tests _dir)
 	# -DGEARMULATOR_MM_ROM=<OS 1.32B image> runs it in ctest; without it the test skips.
 	add_test(NAME mmDeskFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM})
 	set_tests_properties(mmDeskFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
+	# B-049: the amp envelope the editor draws against the firmware's (one note per value, the output's level).
+	# Only with a ROM (a section name in its place would be read as the ROM).
+	if(GEARMULATOR_MM_ROM)
+		add_test(NAME mmAmpEnvelopeFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM} ampenv)
+		set_tests_properties(mmAmpEnvelopeFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 600)
+	endif()
 	# B-031 on the Monomachine: the backup from MM_SYX, the ROM from GEARMULATOR_MM_FIRMWARE_BIN; skipped without them.
 	add_test(NAME mmSyxPickFirmwareTest COMMAND mmDeskFirmwareTest --env syxpick)
 	set_tests_properties(mmSyxPickFirmwareTest PROPERTIES

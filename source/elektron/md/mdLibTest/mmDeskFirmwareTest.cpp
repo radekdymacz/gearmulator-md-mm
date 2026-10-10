@@ -2,7 +2,8 @@
 // real MM OS 1.32B firmware, headless. The same Desk code as the plug-in; the
 // Port here drives an emulated machine. Manual: needs a user-supplied ROM.
 //
-//   mmDeskFirmwareTest <MM-ROM> [only]   only one part, e.g. machine (B-027: a machine change stays)
+//   mmDeskFirmwareTest <MM-ROM> [only]   only one part, e.g. machine (B-027: a machine change stays),
+//                                        ampenv (B-049: the amp envelope the editor draws is the firmware's)
 //
 // Exits 77 (skip) without arguments.
 
@@ -2559,6 +2560,115 @@ namespace
 	}
 }
 
+namespace
+{
+	// B-049: the AMPLIFICATION envelope the editor draws (the catalogue's ampEnvelope, from ed::mmAmpAttackMs,
+	// mmAmpHoldSixteenths, mmAmpFallMs) is the one the firmware plays. GND-SIN on track 1, the filter open, one note;
+	// the output's level (RMS over 10 ms) against the level of a note with ATK 0 DEC 127 (the reference).
+	void ampEnvelope(const Bytes& _rom)
+	{
+		std::puts("amp envelope (B-049)");
+		Machine m(_rom, "mm", {}, true, g_mm);
+		m.send(ed::mmAssignMachine(0, 1, 1));
+		m.run(200);
+		m.send(ed::mmSetRouting(0, 1, 0));
+		m.run(200);
+		// level, AMP DIST VOL PAN PORT, FILTER fully open
+		for(const auto& [cc, v] : std::vector<std::pair<uint8_t, uint8_t>>{{7, 127}, {60, 0}, {61, 100}, {62, 64}, {63, 0}, {72, 0}, {73, 127},
+			{74, 0}, {75, 0}, {76, 0}, {77, 0}, {78, 0}, {79, 0}})
+			m.send({0xb0, cc, v});
+		struct Note
+		{
+			std::vector<double> level;	// one value per ms from the NOTE ON
+			size_t off = 0;				// the NOTE OFF, ms
+		};
+		const auto play = [&](const std::array<uint8_t, 4>& _ahdr, const double _gateMs, const double _tailMs)
+		{
+			for(uint8_t i = 0; i < 4; ++i)
+				m.send({0xb0, static_cast<uint8_t>(56 + i), _ahdr[i]});
+			m.run(150);
+			const size_t start = m.left().size();
+			m.send({0x90, 60, 100});
+			m.run(_gateMs);
+			const size_t off = m.left().size();
+			m.send({0x80, 60, 0});
+			m.run(_tailMs);
+			const auto& l = m.left();
+			const auto& r = m.right();
+			const size_t w = g_rate / 1000;
+			Note n;
+			n.off = (off - start) / w;
+			for(size_t i = start; i + w <= l.size(); i += w)
+			{
+				const size_t a = i >= start + 5 * w ? i - 5 * w : start, b = std::min(l.size(), i + 5 * w);
+				double e = 0;
+				for(size_t j = a; j < b; ++j)
+					e += static_cast<double>(l[j]) * l[j] + static_cast<double>(r[j]) * r[j];
+				n.level.push_back(std::sqrt(e / static_cast<double>(2 * (b - a))));
+			}
+			return n;
+		};
+		const auto first = [](const Note& _n, const size_t _from, const std::function<bool(double)>& _pred) -> double
+		{
+			for(size_t i = _from; i < _n.level.size(); ++i)
+				if(_pred(_n.level[i]))
+					return static_cast<double>(i);
+			return -1;
+		};
+		const auto refNote = play({0, 0, 127, 0}, 1000, 300);
+		double ref = 0;
+		for(size_t i = 200; i < 900 && i < refNote.level.size(); ++i)
+			ref = std::max(ref, refNote.level[i]);
+		check(ref > 1e-6, "the reference note sounds");
+		if(ref <= 1e-6)
+			return;
+		// near: the firmware's tick and the 10 ms window add some 20 ms to any time measured here
+		const auto near = [](const double _measured, const double _expected) { return _measured >= 0 && std::fabs(_measured - _expected) <= _expected * 0.25 + 25; };
+		const auto ms = [](const double _v) { return std::to_string(static_cast<int>(std::lround(_v))) + " ms"; };
+		for(const uint8_t atk : {48, 64, 80, 96})
+		{
+			const auto n = play({atk, 0, 127, 0}, ed::mmAmpAttackMs(atk) + 600, 300);
+			const double t = first(n, 0, [&](double v) { return v >= 0.9 * ref; });
+			check(near(t, ed::mmAmpAttackMs(atk)), "ATK " + std::to_string(atk) + ": 90 % after " + ms(t) + ", the editor says " + ms(ed::mmAmpAttackMs(atk)));
+		}
+		for(const auto& [hold, bpm] : std::vector<std::pair<uint8_t, double>>{{16, 120}, {64, 120}, {64, 90}})
+		{
+			m.send(ed::mmSetTempo(bpm));
+			m.run(100);
+			const auto n = play({0, hold, 0, 0}, 15000.0 / bpm * hold / 8 + 800, 200);
+			const double t = first(n, 30, [&](double v) { return v < 0.1 * ref; });
+			const double want = ed::mmAmpHoldSixteenths(hold) * 15000.0 / bpm + ed::mmAmpFallMs(0);
+			check(near(t, want), "HOLD " + std::to_string(hold) + " at " + std::to_string(static_cast<int>(bpm)) + " BPM: down 20 dB after " + ms(t)
+				+ ", the editor says " + ms(want));
+		}
+		m.send(ed::mmSetTempo(120));
+		m.run(100);
+		for(const uint8_t dec : {32, 64, 80, 96})
+		{
+			const auto n = play({0, 0, dec, 0}, ed::mmAmpFallMs(dec) * 1.5 + 300, 200);
+			const double t = first(n, 30, [&](double v) { return v < 0.1 * ref; });
+			check(near(t, ed::mmAmpFallMs(dec)), "DEC " + std::to_string(dec) + ": down 20 dB after " + ms(t) + ", the editor says " + ms(ed::mmAmpFallMs(dec)));
+		}
+		{
+			const auto n = play({0, 0, 127, 0}, 4000, 200);
+			check(n.level.size() > 3900 && n.level[3900] > 0.5 * ref, "DEC 127 holds the level until the NOTE OFF (4 s)");
+		}
+		for(const uint8_t rel : {32, 64, 96})
+		{
+			const auto n = play({0, 0, 127, rel}, 300, ed::mmAmpFallMs(rel) * 1.5 + 300);
+			const double t = first(n, n.off, [&](double v) { return v < 0.1 * ref; }) - static_cast<double>(n.off);
+			check(near(t, ed::mmAmpFallMs(rel)), "REL " + std::to_string(rel) + ": down 20 dB " + ms(t) + " after the NOTE OFF, the editor says " + ms(ed::mmAmpFallMs(rel)));
+		}
+		{
+			const auto n = play({0, 0, 127, 127}, 300, 5000);
+			check(n.level.size() > n.off + 4800 && n.level[n.off + 4800] > 0.5 * ref, "REL 127 does not fade (5 s after the NOTE OFF)");
+			// let it go: REL 0 and a new note's NOTE OFF
+			play({0, 0, 0, 0}, 50, 200);
+		}
+	}
+
+}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -2639,6 +2749,8 @@ int main(const int _argc, char** _argv)
 			machineStays(rom);
 			machineStaysHw(rom);
 		}
+		if(only == "ampenv")
+			ampEnvelope(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 		return g_failures ? 1 : 0;
