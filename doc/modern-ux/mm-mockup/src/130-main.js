@@ -401,8 +401,8 @@ function setPlate(v){S.plate=v;document.documentElement.dataset.plate=v;try{loca
  if(v==="mk2")toast("MKII: the same silver plate, plus user waveforms and the DigiPRO draw machines.");
  render();redraw()}
 (()=>{let v=null;try{v=localStorage.getItem("mmeditor.plate")}catch(_){}if(!["mk1","mk2"].includes(v))v="mk2";S.plate=v;document.documentElement.dataset.plate=v})();
-document.fonts&&document.fonts.ready.then(()=>{if(S.ws==="seq"){fitLane();drawSlides()}redraw();alignLock()});
-if(window.ResizeObserver)new ResizeObserver(()=>{if(S.ws==="seq"){fitLane();alignLock()}}).observe(document.getElementById("main"));
+document.fonts&&document.fonts.ready.then(()=>{if(S.ws==="seq"){genBarFit();fitLane();drawSlides()}redraw();alignLock()});
+if(window.ResizeObserver)new ResizeObserver(()=>{if(S.ws==="seq"){genBarFit();fitLane();alignLock()}}).observe(document.getElementById("main"));
 addEventListener("resize",()=>{if(S.ws==="seq"){fitLane();drawSlides();alignLock()}redraw()});
 
 /* deep links: #ws=sound&t=3&dock=arp&plate=mk1&mode=multi */
