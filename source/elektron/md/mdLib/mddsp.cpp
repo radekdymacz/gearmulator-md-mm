@@ -45,8 +45,7 @@ namespace md
 		m_periphX.getEssiClock().setExternalClockFrequency(10'240'000);
 		m_periphX.getEssiClock().setSamplerate(44100);
 		m_periphX.getEssiClock().setClockSource(dsp56k::EsxiClock::ClockSource::Cycles);
-		m_periphX.getEssiClock().setExactCycleDeadlineEnabled(
-			transportPolicy(m_hardware.getModel()).exactEssiCycleDeadlines);
+		// Exact cycle deadlines or not: Hardware::applyEssiCycleDeadlines, from the speed-ups position.
 
 		// Fine-link mode must be active before the firmware writes CRA so ESSI0 can
 		// run below the codec clock base. Synchronous receivers skip RX when their

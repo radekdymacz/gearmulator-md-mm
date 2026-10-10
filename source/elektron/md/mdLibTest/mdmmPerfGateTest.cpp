@@ -4,7 +4,7 @@
 // hashes of the old and the new binary are identical and the instructions and cycles per frame drop by the amount the
 // lever promises; a release build passes only if its hashes equal the recorded goldens.
 //   mdmmPerfGateTest <ROM> md|mm [seconds-per-phase=8] [--scenario <name>] [--outputs stereo|all]
-//                    [--golden <goldens.json> [--record]]
+//                    [--golden <goldens.json> [--record]] [--wav <file.wav>]
 // Boots the machine (MD OS 1.63 or MM OS 1.32B) headless, sets up the scenario, then renders two phases in 64-frame
 // blocks at 44.1 kHz: "stopped" and, after a press of PLAY, "playing". The scenarios
 // (doc/md_mm_performance_diagnostics.md):
@@ -59,6 +59,8 @@
 // GEARMULATOR_MDMM_SPEEDUPS position, seconds per phase) and exits 1 on any difference, field by field; with --record
 // it writes or replaces that entry instead (the file keeps the others). The goldens hold hashes, counts and, as
 // information only, the instruction figures and guest cycles of the recording run: nothing from the firmware.
+// --wav writes the hashed stream (stopped, the press, playing; left and right) as a 32-bit float WAV at 44.1 kHz, for
+// listening to two builds or two switch positions side by side; it changes nothing that is hashed.
 // The tool uses only what main has, so one source builds against both an old and a new emulator.
 // Manual: needs a user-supplied ROM (no firmware is bundled). Exits 77 without one. The counters need macOS; on
 // other systems they print as 0 and only the hashes and cpu_pct mean something.
@@ -669,12 +671,34 @@ namespace
 	void usage()
 	{
 		std::puts("usage: mdmmPerfGateTest <ROM> md|mm [seconds-per-phase=8] [--scenario <name>] "
-			"[--outputs stereo|all] [--golden <goldens.json> [--record]]");
+			"[--outputs stereo|all] [--golden <goldens.json> [--record]] [--wav <file.wav>]");
 		std::string names;
 		for(const auto& s : g_scenarios)
 			names += std::string(" ") + s.name;
 		std::printf("  scenarios:%s\n", names.c_str());
 	}
+}
+
+// 32-bit float, two channels, interleaved, little-endian (the hosts this runs on).
+static bool writeStereoWav(const std::string& _path, const std::vector<float>& _left, const std::vector<float>& _right,
+	const size_t _first, const size_t _count)
+{
+	std::ofstream out(_path, std::ios::binary | std::ios::trunc);
+	if(!out)
+		return false;
+	const auto u32 = [&out](const uint32_t _v) { out.write(reinterpret_cast<const char*>(&_v), 4); };
+	const auto u16 = [&out](const uint16_t _v) { out.write(reinterpret_cast<const char*>(&_v), 2); };
+	const auto dataBytes = static_cast<uint32_t>(_count * 2 * sizeof(float));
+	out.write("RIFF", 4); u32(36 + dataBytes); out.write("WAVE", 4);
+	out.write("fmt ", 4); u32(16); u16(3); u16(2); u32(g_rate); u32(g_rate * 2 * sizeof(float)); u16(2 * sizeof(float));
+	u16(32);
+	out.write("data", 4); u32(dataBytes);
+	for(size_t i = _first; i < _first + _count; ++i)
+	{
+		const float frame[2] = {_left[i], _right[i]};
+		out.write(reinterpret_cast<const char*>(frame), sizeof(frame));
+	}
+	return static_cast<bool>(out);
 }
 
 int main(const int _argc, char** _argv)
@@ -697,6 +721,7 @@ int main(const int _argc, char** _argv)
 	bool allOutputs = false;
 	std::string goldenPath;
 	bool recordGolden = false;
+	std::string wavPath;
 	for(int i = 3; i < _argc; ++i)
 	{
 		const std::string arg = _argv[i];
@@ -717,6 +742,8 @@ int main(const int _argc, char** _argv)
 			goldenPath = _argv[++i];
 		else if(arg == "--record")
 			recordGolden = true;
+		else if(arg == "--wav" && hasValue)
+			wavPath = _argv[++i];
 		else if(i == 3 && arg.rfind("--", 0) != 0)
 			seconds = std::atof(arg.c_str());
 		else
@@ -868,6 +895,11 @@ int main(const int _argc, char** _argv)
 		}
 		last.write();
 		lines.push_back(std::move(last));
+		if(!wavPath.empty() && !writeStereoWav(wavPath, m.left(), m.right(), streamFirst, streamCount))
+		{
+			std::printf("mdmmPerfGateTest: could not write %s\n", wavPath.c_str());
+			return 2;
+		}
 
 		if(playingMoves == 0)
 		{

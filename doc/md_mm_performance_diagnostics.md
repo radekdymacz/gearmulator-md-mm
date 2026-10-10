@@ -32,14 +32,19 @@ this on later launches. The context menu can stop an environment-started capture
 
 ## Switches for testers
 
-The editors run the emulated Machinedrum and Monomachine faster than they used to (step 1 of the emulation
-CPU work: four speed-ups, listed below). One switch turns all of them off, so you can find out in minutes
-whether a CPU problem, a click or a timing difference comes from them. **Both positions produce the same
-audio, bit for bit**, checked on both firmwares (audio, RAM, SRAM, loader RAM, patch RAM and MIDI out are
-compared); only the host CPU differs. With the speed-ups off the emulation runs the code that the
-speed-ups replaced, and costs about what it did before step 1: a few per cent less, because the one thing
-that stays on is the `processUC` gating (part B of L5; it only skips work that cannot change anything, so
-it has no switch).
+The editors run the emulated Machinedrum and Monomachine faster than they used to (the emulation CPU work: the
+speed-ups listed below). One switch turns all of them off, so you can find out in minutes whether a CPU problem, a
+click or a timing difference comes from them. With the speed-ups off the emulation runs the code that the
+speed-ups replaced, and costs about what it did before them: a few per cent less, because the one thing that stays
+on is the `processUC` gating (part B of L5; it only skips work that cannot change anything, so it has no switch).
+
+- **Step 1 (L1, L11, L2b, L5) produces the same audio in both positions, bit for bit**, checked on both firmwares
+  (audio, RAM, SRAM, loader RAM, patch RAM and MIDI out are compared); only the host CPU differs.
+- **Step 2's L3 changes the Machinedrum's audio between the positions, by design**: with the speed-ups on its
+  serial ports wake the DSPs at the exact cycle of each slot, as the Monomachine always has; off, as before. The
+  Monomachine is not affected. So on the Machinedrum, on and off are two slightly different machines (the same
+  patterns and sounds, notes and DSP work shifted by microseconds), and comparing the two by ear is a fair test of
+  L3 itself.
 
 - **Menu: Developer > Speed-ups off (legacy emulation, slower).** Ticked is the old
   emulation. The choice applies at once, without restarting, and is kept in the plug-in's settings (key
@@ -58,6 +63,9 @@ The speed-ups the switch controls:
 - **L2b** the Machinedrum DSP catch-ups run under one cycle-bounded entry instead of block by block.
 - **L5** the ColdFire's timers and UART transmitters are stepped when they reach an event, not after
   every instruction.
+- **L3** (step 2, Machinedrum only) the serial clock wakes the DSPs at the exact cycle of their next slot instead
+  of at half the remaining cycles converted to instructions, so the DSPs are no longer stopped several times on
+  the way to each slot. This one changes the Machinedrum's audio (above).
 
 Two finer environment variables exist for narrowing a problem down further. Both are environment
 variables only:
@@ -235,15 +243,18 @@ notice, its once-a-session rule and **Don't show again** kept in a real config f
 ## Gate tool: bit-exact audio and host cost (mdmmPerfGateTest)
 
 `mdmmPerfGateTest` (source/elektron/md/mdLibTest, built with `BUILD_TESTING=ON`, manual: it needs a ROM) is the
-check behind "both positions produce the same audio, bit for bit" above and behind the local release gate
+check behind "step 1 produces the same audio in both positions, bit for bit" above and behind the local release gate
 (doc/release/LOCAL-GATE.md). It boots MD OS 1.63 or MM OS 1.32B headless, sets up a scenario, renders a stopped
 phase (with a fixed burst of host notes in its first 1.5 s), presses PLAY and renders a playing phase, and prints
 hashes of everything the emulation produced next to its host cost per audio frame.
 
 ```
 mdmmPerfGateTest <ROM> md|mm [seconds-per-phase=8] [--scenario <name>] [--outputs stereo|all]
-                 [--golden <goldens.json> [--record]]
+                 [--golden <goldens.json> [--record]] [--wav <file.wav>]
 ```
+
+`--wav` also writes the hashed stream (stopped phase, the PLAY press, playing phase; left and right) as a 32-bit
+float WAV at 44.1 kHz, for listening to two builds or two switch positions side by side.
 
 **Scenarios.** Without `--scenario` the tool does what it always did (`md-busy` for md, `mm-a01` for mm), with
 the same hashes.
@@ -277,8 +288,9 @@ hash of `md-busy` and `mm-a01` are the values the step 1 work was checked agains
 `<ROM fingerprint>/<scenario>/<stereo|all>/speedups-<on|off>/<seconds>s` and exits 1, with one
 `mdmmPerfGateTest golden: differs <field> golden=... run=...` line per difference, when any compared field
 differs or is missing on either side, or when the file has no entry for the key. The speed-ups position is the
-machine's own (`GEARMULATOR_MDMM_SPEEDUPS=0` gives `speedups-off`); both positions have their own entries, which
-hold the same hashes. The last line is `mdmmPerfGateTest golden: PASS (...)` or `... FAIL (...)`.
+machine's own (`GEARMULATOR_MDMM_SPEEDUPS=0` gives `speedups-off`); both positions have their own entries. For
+the Monomachine they hold the same hashes; for the Machinedrum they differ once L3 is in (its `speedups-off`
+entries keep the pre-L3 machine). The last line is `mdmmPerfGateTest golden: PASS (...)` or `... FAIL (...)`.
 `--golden <file> --record` writes or replaces that one entry and keeps the others. An entry's `compare` object holds
 every hash and count (`frames`, `nonsilent_frames`, `playhead_moves`, `midi_out_events`, `press_frame`,
 `press_frames`, `stream_frames`); its `info` object holds the recording run's instruction figures and guest cycles

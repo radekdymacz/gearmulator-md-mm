@@ -73,7 +73,9 @@ namespace
 			&& md.hostReceiveQueueCapacityWords == 16
 			&& md.hostTransmitBackpressureThresholdWords == 4
 			&& md.hostTransmitBackpressureReleaseUcCycles == 200'000
-			&& !md.exactEssiCycleDeadlines,
+			&& !md.exactEssiCycleDeadlines
+			&& md.exactEssiCycleDeadlinesSpeedUps
+			&& !md.exactEssiCycleDeadlinesFor(false) && md.exactEssiCycleDeadlinesFor(true),
 			"Machinedrum transport policy changed during consolidation")
 			&& check(mm.backgroundQuantumMicroseconds == 30.0
 				&& mm.catchUpMaxDspCycles == 100'000
@@ -81,7 +83,8 @@ namespace
 				&& mm.hostReceiveQueueCapacityWords == 16
 				&& mm.hostTransmitBackpressureThresholdWords == 4
 				&& mm.hostTransmitBackpressureReleaseUcCycles == 200'000
-				&& mm.exactEssiCycleDeadlines,
+				&& mm.exactEssiCycleDeadlines
+				&& mm.exactEssiCycleDeadlinesSpeedUps,
 				"Monomachine transport policy changed during consolidation");
 	}
 

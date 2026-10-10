@@ -1657,6 +1657,15 @@ namespace md
 				++score.unexpectedShort;);
 	}
 
+	void Hardware::applyEssiCycleDeadlines()
+	{
+		// Takes effect at each DSP's next peripheral run: the deadline already scheduled is kept (in cycles
+		// when it was exact, in instructions when not) and the next one uses the new mode.
+		const bool exact = transportPolicy(m_model).exactEssiCycleDeadlinesFor(m_speedUps);
+		m_dspMixer.getPeriph().getEssiClock().setExactCycleDeadlineEnabled(exact);
+		m_dspProducer.getPeriph().getEssiClock().setExactCycleDeadlineEnabled(exact);
+	}
+
 	void Hardware::schedCatchUpDspToDsp(const uint32_t _consumer, const uint32_t _producer)
 	{
 		// Before a producer DSP enqueues a link frame into the ESSI route,

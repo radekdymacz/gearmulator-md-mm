@@ -567,7 +567,7 @@ BANNER
 		sed 's/;*$//')"
 	if [ "${bad}" = 0 ] && [ "${total}" -gt 0 ]; then
 		equal="${pass} of ${total} runs equal their golden"
-		stage_end PASS "${equal} (scenarios x stereo/all x speed-ups on/off, bit-exact)"
+		stage_end PASS "${equal} (scenarios x stereo/all x speed-ups on/off, each bit-exact to its golden)"
 	else
 		stage_end FAIL "${pass} of ${total} runs equal their golden" "${notes:-no runs}; logs ${OUT}/goldens"
 	fi
