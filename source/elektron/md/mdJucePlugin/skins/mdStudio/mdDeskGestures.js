@@ -221,10 +221,7 @@ function selCell(e, d) {
 	const r = el?.closest("#seq .rul[data-s]"); return r ? { t: d.at.t, s: +r.dataset.s } : null;
 }
 /* where a dragged selection lands: moved by the drag, within the tracks and the steps shown */
-function selDropAt(d) {
-	const x = S.stepSel, t = clamp(x.t + d.at.t - d.from.t, 0, 16 - x.n), from = clamp(x.from + d.at.s - d.from.s, 0, V.len - 1);
-	return { t, n: x.n, from, to: Math.min(from + x.to - x.from, V.len) };
-}
+function selDropAt(d) { return StepSel.dropAt(S.stepSel, d, V.len, TRACKS); }
 main.addEventListener("pointerdown", e => {
 	if (e.button !== 0 || V.rec || S.ws !== "seq") return;
 	const st = e.target.closest("#seq .st"), ru = e.target.closest("#seq .rul[data-s]");
@@ -240,7 +237,8 @@ document.addEventListener("pointermove", e => {
 	if (e.buttons === 0 && e.pointerType === "mouse") { endSelect(); return; }
 	const c = selCell(e, d); if (!c || (c.t === d.at.t && c.s === d.at.s)) return;
 	const n = Held.with("select", { at: c, moved: true });
-	if (n.drop) syncSel(selDropAt(n)); else { S.stepSel = selBetween(n.from, n.at); syncSel(); }
+	const w = StepSel.during(n, S.stepSel, V.len, TRACKS);
+	if (w.ghost) syncSel(w.ghost); else { S.stepSel = w.sel; syncSel(); }
 });
 function endSelect() {
 	const d = Held.end("select"); if (!d) return;
@@ -248,9 +246,9 @@ function endSelect() {
 		const eat = e => { e.stopPropagation(); e.preventDefault(); };
 		addEventListener("click", eat, { capture: true, once: true }); setTimeout(() => removeEventListener("click", eat, true), 0);
 	}
-	if (d.drop && d.moved) { const g = selDropAt(d); syncSel(); selCopyTo(g.t, g.from); return; }
-	const x = S.stepSel;
-	const sel = d.extend && !d.moved && x ? selExtend(x, d.at) : selBetween(d.from, d.at);
+	const r = StepSel.end(d, S.stepSel, V.len, TRACKS);
+	if (r.drop) { syncSel(); selCopyTo(r.drop.t, r.drop.from); return; }
+	const sel = r.sel;
 	setSel(sel);
 	if (sel.t !== S.sel && sel.n === 1) select(sel.t);
 	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete (or Copy, Clr, Paste above) · right-click: more`);

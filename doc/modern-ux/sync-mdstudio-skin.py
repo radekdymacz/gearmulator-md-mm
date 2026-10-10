@@ -88,7 +88,7 @@ APP = ['mdDeskApp.js', 'mdDeskSoundGroups.js', 'mdDeskTop.js', 'mdDeskSeq.js', '
 SCRIPTS = ['deskModal.js', 'deskMenu.js', 'deskCaps.js', 'deskBoot.js', 'deskSyx.js', 'deskBridge.js', 'deskDrop.js',
            'deskZoom.js', 'deskAbout.js', 'deskDocs.js', 'deskOverlay.js', 'mdDeskModel.js', 'deskGen.js',
            'mdDeskGen.js',
-           'deskKeys.js', 'deskKeyView.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'deskTogglePaint.js'] + APP + ['mdDeskLive.js', 'mdDeskLibrary.js', 'deskGlobal.js', 'mdDeskGlobal.js', 'deskAudio.js', 'mdDeskAudio.js',
+           'deskKeys.js', 'deskKeyView.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'deskTogglePaint.js', 'deskSelect.js'] + APP + ['mdDeskLive.js', 'mdDeskLibrary.js', 'deskGlobal.js', 'mdDeskGlobal.js', 'deskAudio.js', 'mdDeskAudio.js',
            'deskAudioSelfTest.js', 'mdDeskSelfTest.js', 'deskJourney.js', 'mdDeskJourneys.js']
 for f in APP:
     assert os.path.exists(SK + f), 'APP lists %s, which is not in skins/mdStudio/' % f
