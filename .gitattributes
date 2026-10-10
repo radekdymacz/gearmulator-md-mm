@@ -2,3 +2,5 @@
 *.sh text eol=lf
 *.txt text eol=lf
 *.cmake text eol=lf
+# The committed PGO profile (scripts/macos/train_mdmm_pgo.sh writes it): generated, not reviewed line by line.
+source/elektron/md/pgo/*.proftext text eol=lf -diff linguist-generated=true

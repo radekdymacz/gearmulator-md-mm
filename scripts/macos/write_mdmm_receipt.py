@@ -67,9 +67,9 @@ def release_selection(
         for architecture in SUPPORTED_MACOS_ARCHITECTURES
         if architecture in requested
     )
-    if pgo_mode not in {"none", "use"}:
+    if pgo_mode not in {"none", "use", "committed"}:
         raise RuntimeError(
-            "GEARMULATOR_MDMM_APPLE_PGO_MODE must be none or use for product builds"
+            "GEARMULATOR_MDMM_APPLE_PGO_MODE must be none, use or committed for product builds"
         )
     if pgo_mode == "use":
         if len(architectures) != 1:
@@ -86,7 +86,8 @@ def release_selection(
             if not pgo_provenance.is_file():
                 raise RuntimeError(f"PGO provenance does not exist: {pgo_provenance}")
     elif pgo_profile is not None or pgo_provenance is not None:
-        raise RuntimeError("PGO inputs were supplied while PGO mode is none")
+        # committed: the profile and its record are the repository's (source/elektron/md/pgo).
+        raise RuntimeError(f"PGO inputs were supplied while PGO mode is {pgo_mode}")
 
     architecture_label = "Universal" if len(architectures) == 2 else architectures[0]
     pgo_suffix = "-PGO" if pgo_mode == "use" else ""
@@ -230,19 +231,37 @@ def release_optimization(
         )
 
     pgo_mode = cache.get("GEARMULATOR_MDMM_APPLE_PGO_MODE", "none")
-    if pgo_mode not in {"none", "use"}:
+    if pgo_mode not in {"none", "use", "committed"}:
         raise RuntimeError(
-            f"release artifacts require PGO mode none or use; found {pgo_mode!r}"
+            f"release artifacts require PGO mode none, use or committed; found {pgo_mode!r}"
         )
     applied_pgo_mode = cache.get(
         "GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PGO_MODE", ""
     )
+    pgo_details: dict[str, object] = {}
+    if pgo_mode == "committed" and applied_pgo_mode == "none":
+        # The committed profile could not be used (missing, or no llvm-profdata): the build fell back to the
+        # ThinLTO build and said why. The receipt says the same.
+        pgo_mode = "none"
+        pgo_details["pgo_fallback"] = cache.get(
+            "GEARMULATOR_MDMM_APPLE_PGO_FALLBACK", "committed profile not applied"
+        )
     if applied_pgo_mode != pgo_mode:
         raise RuntimeError(
             f"configured PGO mode {pgo_mode!r} was not applied; found {applied_pgo_mode!r}"
         )
     profile_sha256 = None
-    if pgo_mode == "use":
+    if pgo_mode == "committed":
+        # One profile, trained on arm64 and kept in the repository, for every slice: clang applies the counts of
+        # each function whose hash matches and ignores the rest. The record is the text profile's SHA-256 and
+        # the profiled folders that changed since training.
+        profile_sha256 = cache.get("GEARMULATOR_MDMM_APPLE_PGO_COMMITTED_SHA256", "")
+        _require_sha256(profile_sha256, "committed PGO profile")
+        if not cache.get("GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PROFILE_SHA256", ""):
+            raise RuntimeError("generated build did not apply the committed PGO profile")
+        stale = cache.get("GEARMULATOR_MDMM_APPLE_PGO_STALE", "")
+        pgo_details["pgo_stale"] = [folder for folder in stale.split(";") if folder]
+    elif pgo_mode == "use":
         if len(architectures) != 1:
             raise RuntimeError(
                 "one PGO profile cannot qualify a universal build; build and record each "
@@ -271,6 +290,7 @@ def release_optimization(
             "dsp_optimization": True,
             "pgo_mode": pgo_mode,
             "profile_sha256": profile_sha256,
+            **pgo_details,
         }
     return {
         "compiler": compiler,

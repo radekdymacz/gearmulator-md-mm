@@ -128,7 +128,7 @@ Gains are % of today's emulation-thread CPU, after overlap with the levers befor
 | Rank | Lever | Verdict | MD stop | MD play | MM stop | MM play | Bit-exact | Effort |
 |---|---|---|---|---|---|---|---|---|
 | 1 | L4 DSP idle-loop fast-forward | confirmed (prototype) | 12 | 6 | 15 | 6 | yes, proven | days to weeks |
-| 2 | L6 PGO in release builds | confirmed (measured) | 9 today, ×0.92 at the end | 9 | 10 | 11 | must re-check | days |
+| 2 | L6 PGO in release builds | shipped (perf/pgo, "L6 measured") | 9 today, ×0.92 at the end; measured ×0.924 after step 2 | 7 | 5.5 | 5 | yes, goldens 24 + 6 | days |
 | 3 | L1 UC idle skip: check inputs once | confirmed (measured) | 5 | 5 | 3 | 3 | yes, measured | hours |
 | 4 | L3 MD exact serial-port deadlines | confirmed, smaller | 6 | 3 | 0 | 0 | no, audio changes once | hours plus days of tests |
 | 5 | L5 lean ColdFire loop | weakened | 3 | 3 | 6 | 6 | by design | days |
@@ -159,6 +159,52 @@ Gains are % of today's emulation-thread CPU, after overlap with the levers befor
 - **Risk.** A universal macOS binary cannot use PGO (`optimization.cmake:155-158`), so the package must be split per architecture. Each mdLib change makes the profile stale, and the build then fails (`:193-194`). Training needs ROMs, so CI cannot do it. -Ofast float code may change bits: compare renders.
 - **After the other levers.** PGO helps only C++, not JIT code, so the factor falls to about 0.91-0.94.
 - **Cheapest experiment.** Done. Next: repeat after step 1, run `scripts/macos/check_mdmm_core_capacity.py` on an arm64 PGO build, diff the audio.
+
+#### L6 measured (2026-10-10, shipped on branch perf/pgo)
+
+- **Design.** One profile, trained on this Mac (arm64) with the ROMs, committed as LLVM's text profile
+  (`source/elektron/md/pgo/mdmm-macos.proftext`, 9184 functions, 1.5 MB, 130 KB compressed; `mdmm-macos.json` records
+  the commit, the git tree of each profiled folder, the compiler and the workload). The build converts it with its
+  own `llvm-profdata` (text is the one format every version reads, so a profile from Xcode 26 works on CI's Xcode 16)
+  and applies it to both slices of the universal build (`GEARMULATOR_MDMM_APPLE_PGO_MODE=committed`, the default of
+  `build_mdmm.sh`, CI and the local gate). This replaces the per-architecture split the risk above called for: clang
+  matches counts per function hash, so the x86_64 slice uses every function it shares with arm64 (in a universal
+  build only 15 functions, the architecture-specific ones, reported mismatched) and compiles the rest as before.
+  Stale (a profiled folder changed since training) only warns: changed functions get no data. Missing: warns, ThinLTO
+  only. CI never trains, so it never needs a ROM. Rejected: a fixture-free training workload (the hot paths are the
+  firmware's own loops through the JIT, the ColdFire core and the scheduler; a synthetic program would train other
+  branches), and the indexed `.profdata` (its format version is the compiler's, and Apple's clang refuses newer ones).
+- **No firmware in it.** `scripts/macos/mdmm_pgo_profile.py check` parses every line as profile data (a symbol name,
+  a decimal number, a comment or header; nothing else is accepted), and scans the file for any run of 31 bytes or more
+  of either ROM (16-byte chunks of the ROM indexed, every offset of the profile looked up): none. CI repeats the parse
+  on every build; the training script runs both before it writes the file. Local function names carry only the file's
+  base name (`audio.cpp:...`), so no path of this Mac is in it either.
+- **libc++.** A third of the counts are in small libc++ functions whose names carry libc++'s version
+  (`B8ne200100`). The build renames that tag to its own SDK's version, so CI's older libc++ keeps them; a function
+  whose body changed is still rejected by its hash.
+- **Workload.** `mdmmPerfGateTest` for every scenario (md-busy, md-factory, md-song, mm-a01, mm-busy, mm-song), all
+  outputs, 8 s stopped then 8 s playing, speed-ups as shipped: about 75 s of six parallel runs.
+- **Bit-exact.** The committed goldens, all 24 plus the 6 exact-ESSI entries, PASS on the arm64 PGO build. The x86_64
+  slice is built with the profile but cannot be run on this Mac (no Rosetta); CI's start tests and pluginval run on
+  the universal package.
+- **Gain.** Release configuration (ThinLTO, DSP libraries), arm64, `mdmmPerfGateTest md|mm 8` (md-busy, mm-a01,
+  stereo, speed-ups on), 6 paired ABBA rounds of the plain ThinLTO build against the PGO build, on a loaded Mac
+  (load 20-46: the pairing, not the absolute values, is the measurement). Medians of the per-round ratio PGO / ThinLTO:
+
+  | | host cycles per frame | retired host instructions per frame | thread CPU |
+  |---|---|---|---|
+  | MD stopped | ×0.924 (0.915-0.932) | ×0.939 | ×0.925 |
+  | MD playing | ×0.928 (0.915-0.954) | ×0.945 | ×0.925 |
+  | MM stopped | ×0.943 (0.904-0.969) | ×0.922 | ×0.941 |
+  | MM playing | ×0.948 (0.926-0.955) | ×0.929 | ×0.944 |
+
+  About 7.5 % less on the Machinedrum and 5-6 % on the Monomachine, on top of steps 1 and 2: inside the ×0.91-0.94
+  expected above and over the 5 % gate of §5. The libc++ rename means CI's build should get most of it, but it was
+  measured only on the local toolchain.
+- **Not done.** Windows: MSVC's `.pgd` belongs to the exact instrumented build and toolset, so a profile trained
+  elsewhere cannot be reused in CI; the way there is clang-cl with this same text profile (a compiler change for the
+  Windows build, its own project). Linux: GCC cannot read LLVM profiles (same answer, clang). Not measured: the plug-in
+  in a host (`check_mdmm_core_capacity.py`), the x86_64 slice.
 
 ### 3.3 L1 — UC idle skip: check the inputs once per batch (confirmed twice)
 

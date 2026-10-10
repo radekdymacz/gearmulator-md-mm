@@ -19,12 +19,16 @@ is not the expected build-local directory.
 | --- | --- | --- |
 | `GEARMULATOR_MDMM_APPLE_THINLTO` | `OFF` | Build `mdLib` and `68kEmu` with ThinLTO and propagate the option to their final executable/plugin links. |
 | `GEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP` | `OFF` | Extend the selected optimization to `dsp56kEmu` and `dsp56kBase`. |
-| `GEARMULATOR_MDMM_APPLE_PGO_MODE` | `none` | Select `none`, `generate`, or `use` for profile-guided optimization. |
+| `GEARMULATOR_MDMM_APPLE_PGO_MODE` | `none` | Select `none`, `generate`, `use`, or `committed` for profile-guided optimization. |
 | `GEARMULATOR_MDMM_APPLE_PGO_PROFILE` | Empty | Path to the merged profile for `use` mode. |
 
-`build_mdmm.sh` defaults to `arm64;x86_64` and `pgo_mode=none`, producing
+`build_mdmm.sh` defaults to `arm64;x86_64` and `pgo_mode=committed`, producing
 `Gearmulator-Elektron-macOS-Universal.zip`. Those defaults are also explicit in
-the hosted workflow. A local, guarded arm64 PGO candidate uses the same build,
+the hosted workflow. `committed` (since 2026-10-10, lever L6) uses the profile
+kept in `source/elektron/md/pgo/` for both slices, warns when it is stale and
+falls back to ThinLTO alone when it is missing: [release/CI.md](release/CI.md),
+"PGO". The rest of this section is the older strict path (`use`), kept for
+single-architecture experiments with a private profile. A local, guarded arm64 PGO candidate uses the same build,
 test, signing, measurement, packaging, and receipt path:
 
 ```sh
