@@ -375,5 +375,19 @@ const Journey = (() => {
 	const onScreen = () => document.visibilityState === "visible" ? null : "the editor window is not on screen (display asleep or covered): its canvases are not drawn";
 	/* for needs: real key events through the operating system (u.osKey) exist in the macOS plug-in only */
 	const osKeyPath = () => osKeys() ? null : "no way in for real key events here (the macOS plug-in has one, mdOsKeys.h)";
-	return { run, demo, ok, sleep, until, u, onScreen, osKeyPath, menu, editorMenuJourney };
+	/* The page as it looks now, for a screenshot taken outside the editor (scripts/mdmm-snap.py renders it in headless
+	   Chrome, where macOS gives the shell no Screen Recording): the DOM with each canvas's drawing as its background,
+	   the form values as attributes, the window's size; logged in pieces as "SNAP <name> <i>/<n> <text>". */
+	function snapshot(name) {
+		const doc = document.documentElement.cloneNode(true), live = [...document.querySelectorAll("canvas")], copies = [...doc.querySelectorAll("canvas")];
+		live.forEach((c, i) => { try { const d = c.width && c.height ? c.toDataURL() : ""; if (d && copies[i]) copies[i].style.backgroundImage = `url(${d})`, copies[i].style.backgroundSize = "100% 100%"; } catch (_) { } });
+		const liveSel = [...document.querySelectorAll("select")], copySel = [...doc.querySelectorAll("select")];
+		liveSel.forEach((x, i) => { const c = copySel[i]; if (c) [...c.options].forEach((o, k) => k === x.selectedIndex ? o.setAttribute("selected", "") : o.removeAttribute("selected")); });
+		doc.querySelectorAll("script").forEach(x => x.remove());
+		doc.setAttribute("data-snap-size", innerWidth + "x" + innerHeight);
+		doc.querySelector("body")?.setAttribute("style", (document.body.getAttribute("style") || "") + `;--snapzoom:${document.body.style.zoom || ""}`);
+		const text = JSON.stringify("<!doctype html>\n" + doc.outerHTML), size = 120000, n = Math.ceil(text.length / size);
+		for (let i = 0; i < n; i++) Bridge.log(`SNAP ${name} ${i + 1}/${n} ${text.slice(i * size, (i + 1) * size)}`);
+	}
+	return { run, demo, ok, sleep, until, u, onScreen, osKeyPath, menu, editorMenuJourney, snapshot };
 })();
