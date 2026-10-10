@@ -2,7 +2,7 @@ name: MD/MM nightly full suite
 
 # The full suite on main once a night, only when main changed in the last 24 hours (doc/release/CI.md): a push to
 # main runs one light Linux job, so a Windows or macOS break would otherwise wait for the next release branch.
-# Nobody waits for it; a red run is there in the morning. It starts the four workflows by hand on main
+# Nobody waits for it; a red run is there in the morning. It starts the three workflows by hand on main
 # (workflow_dispatch), so each one's own run, logs and re-run button stay where they always are.
 # 02:00 UTC = 04:00 in Poland in summer time (03:00 in winter time).
 
@@ -36,11 +36,11 @@ jobs:
             echo "run=false" >> "${GITHUB_OUTPUT}"
             echo "::notice title=Nothing new::main has not changed since ${last}"
           fi
-      - name: Start the four workflows
+      - name: Start the three workflows
         if: steps.changed.outputs.run == 'true'
         run: |
           set -euo pipefail
-          for wf in mdmm-editors.yml mdmm-core.yml mdmm-audio-io.yml mdmm-shared-controller.yml; do
+          for wf in mdmm-editors.yml mdmm-core.yml mdmm-audio-io.yml; do
             gh workflow run "${wf}" --repo "${GITHUB_REPOSITORY}" --ref main
             echo "started ${wf}"
           done
