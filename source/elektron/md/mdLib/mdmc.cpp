@@ -74,6 +74,21 @@ namespace md
 		constexpr uint32_t g_immPageMask = g_immPageSize - 1;
 
 		// Firmware bytes are stored big-endian; the accesses may be unaligned, hence memcpy.
+		// memcpy, not a uint16_t load: the firmware may access an odd address, and a misaligned load is undefined
+		// (UBSan stops on it); compilers turn this into one load where the target allows it.
+		uint16_t loadBe16(const uint8_t* const _ptr)
+		{
+			uint16_t value;
+			std::memcpy(&value, _ptr, sizeof(value));
+			return mc68k::endianSwap16IfLittle(value);
+		}
+
+		void storeBe16(uint8_t* const _ptr, const uint16_t _value)
+		{
+			const uint16_t value = mc68k::endianSwap16IfLittle(_value);
+			std::memcpy(_ptr, &value, sizeof(value));
+		}
+
 		uint32_t loadBe32(const uint8_t* const _ptr)
 		{
 			uint32_t value;
@@ -613,7 +628,7 @@ namespace md
 	uint16_t Microcontroller::read16(const uint32_t _addr)
 	{
 		if(const auto* const ram = fastRam(_addr, 2))
-			return mc68k::memoryOps::readU16(ram, 0);
+			return loadBe16(ram);
 		return read16Slow(_addr);
 	}
 
@@ -641,7 +656,7 @@ namespace md
 	{
 		if(auto* const ram = fastRam(_addr, 2))
 		{
-			mc68k::memoryOps::writeU16(ram, 0, _val);
+			storeBe16(ram, _val);
 			return;
 		}
 		write16Slow(_addr, _val);

@@ -166,10 +166,10 @@ namespace
 		bool m_exceptionSeen = false;
 	};
 
-	std::vector<uint8_t> commandBytes(const char (&_fourCC)[5], const uint32_t _size,
+	std::vector<uint8_t> commandBytes(const char* const _command, const uint32_t _size,
 		const std::vector<uint8_t>& _payload = {})
 	{
-		std::vector<uint8_t> bytes(_fourCC, _fourCC + 4);
+		std::vector<uint8_t> bytes(_command, _command + 4);
 		const auto* size = reinterpret_cast<const uint8_t*>(&_size);
 		bytes.insert(bytes.end(), size, size + sizeof(_size));
 		bytes.insert(bytes.end(), _payload.begin(), _payload.end());
