@@ -50,6 +50,54 @@
     "playing.instr_median_per_frame": 205241
    }
   },
+  "33b7c1a9e29f43fd/md-busy/all/speedups-on+exact-essi/8s": {
+   "firmware": "Machinedrum OS 1.63",
+   "compare": {
+    "stopped.audio_hash": "de2b493c1d4b2044",
+    "stopped.frames": "352832",
+    "stopped.nonsilent_frames": "352567",
+    "stopped.playhead_moves": "0",
+    "stopped.outputs_hash": "25c071fdf6200e72",
+    "stopped.out0_hash": "ba2e5b75fbcd5f47",
+    "stopped.out1_hash": "ed977b935fda82d0",
+    "stopped.out2_hash": "aed3b37733606f83",
+    "stopped.out3_hash": "aed3b37733606f83",
+    "stopped.out4_hash": "aed3b37733606f83",
+    "stopped.out5_hash": "aed3b37733606f83",
+    "playing.audio_hash": "d630f064e3d795d0",
+    "playing.frames": "352832",
+    "playing.nonsilent_frames": "352832",
+    "playing.playhead_moves": "67",
+    "playing.outputs_hash": "f76790b456c15aec",
+    "playing.out0_hash": "a0df7ba86c9b4947",
+    "playing.out1_hash": "37b0adcb215d1f34",
+    "playing.out2_hash": "aed3b37733606f83",
+    "playing.out3_hash": "aed3b37733606f83",
+    "playing.out4_hash": "aed3b37733606f83",
+    "playing.out5_hash": "aed3b37733606f83",
+    "combined.audio_hash": "c617ff0981e9f1f7",
+    "combined.ram_hash": "370295f38514b3ae",
+    "combined.sram_hash": "63272c8172f53d07",
+    "combined.loader_hash": "f4931b15e3510383",
+    "combined.patch_hash": "e3b9b323ed198b5b",
+    "combined.midi_out_hash": "06c55fcb377db5bd",
+    "combined.midi_out_events": "1088",
+    "combined.press_frame": "352832",
+    "combined.press_frames": "3584",
+    "combined.press_hash": "d78439d490788d91",
+    "combined.stream_frames": "709248",
+    "combined.stream_hash": "67a73bbf411941ad",
+    "combined.stream_outputs_hash": "499617a14e6b0b9e"
+   },
+   "info": {
+    "stopped.instr_per_frame": 165040,
+    "stopped.uc_cycles_per_frame": 907.029,
+    "stopped.instr_median_per_frame": 166434,
+    "playing.instr_per_frame": 181181,
+    "playing.uc_cycles_per_frame": 907.029,
+    "playing.instr_median_per_frame": 179494
+   }
+  },
   "33b7c1a9e29f43fd/md-busy/all/speedups-on/8s": {
    "firmware": "Machinedrum OS 1.63",
    "compare": {
@@ -129,6 +177,39 @@
     "playing.instr_per_frame": 216591,
     "playing.uc_cycles_per_frame": 907.029,
     "playing.instr_median_per_frame": 205550
+   }
+  },
+  "33b7c1a9e29f43fd/md-busy/stereo/speedups-on+exact-essi/8s": {
+   "firmware": "Machinedrum OS 1.63",
+   "compare": {
+    "stopped.audio_hash": "de2b493c1d4b2044",
+    "stopped.frames": "352832",
+    "stopped.nonsilent_frames": "352567",
+    "stopped.playhead_moves": "0",
+    "playing.audio_hash": "d630f064e3d795d0",
+    "playing.frames": "352832",
+    "playing.nonsilent_frames": "352832",
+    "playing.playhead_moves": "67",
+    "combined.audio_hash": "c617ff0981e9f1f7",
+    "combined.ram_hash": "370295f38514b3ae",
+    "combined.sram_hash": "63272c8172f53d07",
+    "combined.loader_hash": "f4931b15e3510383",
+    "combined.patch_hash": "e3b9b323ed198b5b",
+    "combined.midi_out_hash": "06c55fcb377db5bd",
+    "combined.midi_out_events": "1088",
+    "combined.press_frame": "352832",
+    "combined.press_frames": "3584",
+    "combined.press_hash": "d78439d490788d91",
+    "combined.stream_frames": "709248",
+    "combined.stream_hash": "67a73bbf411941ad"
+   },
+   "info": {
+    "stopped.instr_per_frame": 165079,
+    "stopped.uc_cycles_per_frame": 907.029,
+    "stopped.instr_median_per_frame": 166445,
+    "playing.instr_per_frame": 181089,
+    "playing.uc_cycles_per_frame": 907.029,
+    "playing.instr_median_per_frame": 179499
    }
   },
   "33b7c1a9e29f43fd/md-busy/stereo/speedups-on/8s": {
@@ -212,6 +293,54 @@
     "playing.instr_median_per_frame": 198341
    }
   },
+  "33b7c1a9e29f43fd/md-factory/all/speedups-on+exact-essi/8s": {
+   "firmware": "Machinedrum OS 1.63",
+   "compare": {
+    "stopped.audio_hash": "730b32957a3e56f3",
+    "stopped.frames": "352832",
+    "stopped.nonsilent_frames": "352297",
+    "stopped.playhead_moves": "0",
+    "stopped.outputs_hash": "8ddf9b682f2f45a3",
+    "stopped.out0_hash": "0ac3c04cb05b1a4a",
+    "stopped.out1_hash": "5ce9dcf4beeab3d6",
+    "stopped.out2_hash": "aed3b37733606f83",
+    "stopped.out3_hash": "aed3b37733606f83",
+    "stopped.out4_hash": "aed3b37733606f83",
+    "stopped.out5_hash": "aed3b37733606f83",
+    "playing.audio_hash": "b0e83de47818636b",
+    "playing.frames": "352832",
+    "playing.nonsilent_frames": "352822",
+    "playing.playhead_moves": "67",
+    "playing.outputs_hash": "77b99e87fa2f2c64",
+    "playing.out0_hash": "9158c492246fbfe5",
+    "playing.out1_hash": "adec800ff5a902b5",
+    "playing.out2_hash": "aed3b37733606f83",
+    "playing.out3_hash": "aed3b37733606f83",
+    "playing.out4_hash": "aed3b37733606f83",
+    "playing.out5_hash": "aed3b37733606f83",
+    "combined.audio_hash": "77f96a35e5bc249b",
+    "combined.ram_hash": "32691a439150665c",
+    "combined.sram_hash": "e932f3c8c9c6ea7b",
+    "combined.loader_hash": "f4931b15e3510383",
+    "combined.patch_hash": "892e040242062ab2",
+    "combined.midi_out_hash": "ed57a7f922053b1a",
+    "combined.midi_out_events": "170",
+    "combined.press_frame": "352832",
+    "combined.press_frames": "3584",
+    "combined.press_hash": "74116ec4475e48ab",
+    "combined.stream_frames": "709248",
+    "combined.stream_hash": "2163cc1cb1ea6183",
+    "combined.stream_outputs_hash": "4c872969650f86a9"
+   },
+   "info": {
+    "stopped.instr_per_frame": 164580,
+    "stopped.uc_cycles_per_frame": 907.029,
+    "stopped.instr_median_per_frame": 166426,
+    "playing.instr_per_frame": 175528,
+    "playing.uc_cycles_per_frame": 907.029,
+    "playing.instr_median_per_frame": 173872
+   }
+  },
   "33b7c1a9e29f43fd/md-factory/all/speedups-on/8s": {
    "firmware": "Machinedrum OS 1.63",
    "compare": {
@@ -291,6 +420,39 @@
     "playing.instr_per_frame": 215508,
     "playing.uc_cycles_per_frame": 907.029,
     "playing.instr_median_per_frame": 198445
+   }
+  },
+  "33b7c1a9e29f43fd/md-factory/stereo/speedups-on+exact-essi/8s": {
+   "firmware": "Machinedrum OS 1.63",
+   "compare": {
+    "stopped.audio_hash": "730b32957a3e56f3",
+    "stopped.frames": "352832",
+    "stopped.nonsilent_frames": "352297",
+    "stopped.playhead_moves": "0",
+    "playing.audio_hash": "b0e83de47818636b",
+    "playing.frames": "352832",
+    "playing.nonsilent_frames": "352822",
+    "playing.playhead_moves": "67",
+    "combined.audio_hash": "77f96a35e5bc249b",
+    "combined.ram_hash": "32691a439150665c",
+    "combined.sram_hash": "e932f3c8c9c6ea7b",
+    "combined.loader_hash": "f4931b15e3510383",
+    "combined.patch_hash": "892e040242062ab2",
+    "combined.midi_out_hash": "ed57a7f922053b1a",
+    "combined.midi_out_events": "170",
+    "combined.press_frame": "352832",
+    "combined.press_frames": "3584",
+    "combined.press_hash": "74116ec4475e48ab",
+    "combined.stream_frames": "709248",
+    "combined.stream_hash": "2163cc1cb1ea6183"
+   },
+   "info": {
+    "stopped.instr_per_frame": 164583,
+    "stopped.uc_cycles_per_frame": 907.029,
+    "stopped.instr_median_per_frame": 166427,
+    "playing.instr_per_frame": 175493,
+    "playing.uc_cycles_per_frame": 907.029,
+    "playing.instr_median_per_frame": 173868
    }
   },
   "33b7c1a9e29f43fd/md-factory/stereo/speedups-on/8s": {
@@ -374,6 +536,54 @@
     "playing.instr_median_per_frame": 207912
    }
   },
+  "33b7c1a9e29f43fd/md-song/all/speedups-on+exact-essi/8s": {
+   "firmware": "Machinedrum OS 1.63",
+   "compare": {
+    "stopped.audio_hash": "16ff9d37d69b53e6",
+    "stopped.frames": "352832",
+    "stopped.nonsilent_frames": "352434",
+    "stopped.playhead_moves": "0",
+    "stopped.outputs_hash": "d5444c814580939d",
+    "stopped.out0_hash": "b5928762284bae22",
+    "stopped.out1_hash": "461b63b49908a9ab",
+    "stopped.out2_hash": "aed3b37733606f83",
+    "stopped.out3_hash": "aed3b37733606f83",
+    "stopped.out4_hash": "aed3b37733606f83",
+    "stopped.out5_hash": "aed3b37733606f83",
+    "playing.audio_hash": "3e28735fffb03fee",
+    "playing.frames": "352832",
+    "playing.nonsilent_frames": "352832",
+    "playing.playhead_moves": "74",
+    "playing.outputs_hash": "09f81605bf7d10f6",
+    "playing.out0_hash": "0a074862195334eb",
+    "playing.out1_hash": "7edb78dcaaaa4e96",
+    "playing.out2_hash": "aed3b37733606f83",
+    "playing.out3_hash": "aed3b37733606f83",
+    "playing.out4_hash": "aed3b37733606f83",
+    "playing.out5_hash": "aed3b37733606f83",
+    "combined.audio_hash": "dbd57bd7fa5bc713",
+    "combined.ram_hash": "51de3114d6cdaec8",
+    "combined.sram_hash": "42969ebd072d3b3e",
+    "combined.loader_hash": "f4931b15e3510383",
+    "combined.patch_hash": "9332324fdafa089a",
+    "combined.midi_out_hash": "a6c852a6a90c1319",
+    "combined.midi_out_events": "1056",
+    "combined.press_frame": "352832",
+    "combined.press_frames": "3584",
+    "combined.press_hash": "aa4dd93c863e4b47",
+    "combined.stream_frames": "709248",
+    "combined.stream_hash": "c18f4c536e3c5033",
+    "combined.stream_outputs_hash": "325e33f3e400038e"
+   },
+   "info": {
+    "stopped.instr_per_frame": 165469,
+    "stopped.uc_cycles_per_frame": 907.029,
+    "stopped.instr_median_per_frame": 166433,
+    "playing.instr_per_frame": 182351,
+    "playing.uc_cycles_per_frame": 907.029,
+    "playing.instr_median_per_frame": 179487
+   }
+  },
   "33b7c1a9e29f43fd/md-song/all/speedups-on/8s": {
    "firmware": "Machinedrum OS 1.63",
    "compare": {
@@ -453,6 +663,39 @@
     "playing.instr_per_frame": 218471,
     "playing.uc_cycles_per_frame": 907.029,
     "playing.instr_median_per_frame": 207920
+   }
+  },
+  "33b7c1a9e29f43fd/md-song/stereo/speedups-on+exact-essi/8s": {
+   "firmware": "Machinedrum OS 1.63",
+   "compare": {
+    "stopped.audio_hash": "16ff9d37d69b53e6",
+    "stopped.frames": "352832",
+    "stopped.nonsilent_frames": "352434",
+    "stopped.playhead_moves": "0",
+    "playing.audio_hash": "3e28735fffb03fee",
+    "playing.frames": "352832",
+    "playing.nonsilent_frames": "352832",
+    "playing.playhead_moves": "74",
+    "combined.audio_hash": "dbd57bd7fa5bc713",
+    "combined.ram_hash": "51de3114d6cdaec8",
+    "combined.sram_hash": "42969ebd072d3b3e",
+    "combined.loader_hash": "f4931b15e3510383",
+    "combined.patch_hash": "9332324fdafa089a",
+    "combined.midi_out_hash": "a6c852a6a90c1319",
+    "combined.midi_out_events": "1056",
+    "combined.press_frame": "352832",
+    "combined.press_frames": "3584",
+    "combined.press_hash": "aa4dd93c863e4b47",
+    "combined.stream_frames": "709248",
+    "combined.stream_hash": "c18f4c536e3c5033"
+   },
+   "info": {
+    "stopped.instr_per_frame": 165520,
+    "stopped.uc_cycles_per_frame": 907.029,
+    "stopped.instr_median_per_frame": 166440,
+    "playing.instr_per_frame": 182344,
+    "playing.uc_cycles_per_frame": 907.029,
+    "playing.instr_median_per_frame": 179490
    }
   },
   "33b7c1a9e29f43fd/md-song/stereo/speedups-on/8s": {

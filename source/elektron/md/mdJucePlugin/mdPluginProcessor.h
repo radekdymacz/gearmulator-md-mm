@@ -64,6 +64,10 @@ namespace mdJucePlugin
 		// speed-ups (md::Device::setSpeedUps). Identical audio, more host CPU. Kept in the plug-in's config.
 		void setLegacyEmulation(bool _legacy);
 		bool isLegacyEmulation();
+		// L3's opt-in (md::Device::setExactEssiTiming): exact serial-port timing on the Machinedrum, which changes
+		// its sound; acts only with the speed-ups on. Off by default; kept in the plug-in's config.
+		void setExactEssiTiming(bool _on);
+		bool isExactEssiTiming();
 		// The Machinedrum/Monomachine Editors' setup and session (mdDeskHost.h, doc/modern-ux/UPSTREAM.md).
 		class DeskHost* getDeskHost() const { return m_desk.get(); }
 

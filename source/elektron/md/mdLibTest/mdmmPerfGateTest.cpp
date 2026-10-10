@@ -56,7 +56,8 @@
 // HI08 windows are never read, reads there have side effects.
 // Compare those hashes across builds; compare the per-frame costs as medians of a few paired runs (old, new, old, new).
 // --golden compares the hashes and counts with the entry of the goldens file for (ROM fingerprint, scenario, outputs,
-// GEARMULATOR_MDMM_SPEEDUPS position, seconds per phase) and exits 1 on any difference, field by field; with --record
+// GEARMULATOR_MDMM_SPEEDUPS position (on, off, or on+exact-essi with GEARMULATOR_MDMM_EXACT_ESSI=1 on the MD), seconds
+// per phase) and exits 1 on any difference, field by field; with --record
 // it writes or replaces that entry instead (the file keeps the others). The goldens hold hashes, counts and, as
 // information only, the instruction figures and guest cycles of the recording run: nothing from the firmware.
 // --wav writes the hashed stream (stopped, the press, playing; left and right) as a 32-bit float WAV at 44.1 kHz, for
@@ -787,6 +788,10 @@ int main(const int _argc, char** _argv)
 
 		const char* const name = mm ? "MM" : "MD";
 		const bool speedUps = m.hardware().speedUps();
+		// The position the goldens are keyed by: "on", "off", or "on+exact-essi" when L3 is opted in
+		// (GEARMULATOR_MDMM_EXACT_ESSI=1) on the Machinedrum; on the Monomachine L3 changes nothing, so it stays "on".
+		const std::string position = !speedUps ? "off"
+			: (!mm && m.hardware().exactEssiTimingActive()) ? "on+exact-essi" : "on";
 		const auto fingerprint = m.hardware().firmwareFingerprint();
 		uint64_t combined = g_fnvOffset;
 
@@ -857,7 +862,7 @@ int main(const int _argc, char** _argv)
 
 		std::printf("mdmmPerfGateTest: %s, %.1f s per phase, %u-frame blocks at %u Hz, scenario=%s outputs=%s "
 			"speedups=%s fingerprint=%s\n", name, seconds, g_block, g_rate, scenario->name,
-			allOutputs ? "all" : "stereo", speedUps ? "on" : "off", hex(fingerprint).c_str());
+			allOutputs ? "all" : "stereo", position.c_str(), hex(fingerprint).c_str());
 		if(const char* pacing = std::getenv("GEARMULATOR_MDMM_MIDI_PACING"))
 			std::printf("mdmmPerfGateTest: GEARMULATOR_MDMM_MIDI_PACING=%s is set: MIDI timing, and so the hashes, "
 				"follow it\n", pacing);
@@ -911,7 +916,7 @@ int main(const int _argc, char** _argv)
 		char secondsText[32];
 		std::snprintf(secondsText, sizeof(secondsText), "%gs", seconds);
 		const auto key = hex(fingerprint) + "/" + scenario->name + "/" + (allOutputs ? "all" : "stereo") + "/speedups-"
-			+ (speedUps ? "on" : "off") + "/" + secondsText;
+			+ position + "/" + secondsText;
 		const auto firmware = md::firmwareName(mm ? md::MachineModel::Monomachine : md::MachineModel::Machinedrum);
 		const auto entry = entryOf(lines, firmware);
 		return recordGolden ? record(goldenPath, key, entry) : compareGolden(goldenPath, key, entry);

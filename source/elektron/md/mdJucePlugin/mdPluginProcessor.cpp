@@ -77,6 +77,8 @@ namespace
 
 	// The tester switch for the step 1 speed-ups (setLegacyEmulation): true runs the code they replaced.
 	constexpr auto g_legacyEmulationKey = "legacyEmulation";
+	// L3's opt-in (setExactEssiTiming): true runs the Machinedrum's serial ports on exact cycle deadlines.
+	constexpr auto g_exactEssiTimingKey = "exactEssiTiming";
 
 	const char* productName(const md::MachineModel _model)
 	{
@@ -941,6 +943,8 @@ namespace mdJucePlugin
 		d->setRamRecordingMode(getRamRecordingMode());
 		if(getConfig().getBoolValue(g_legacyEmulationKey, false))
 			d->setSpeedUps(false);
+		if(getConfig().getBoolValue(g_exactEssiTimingKey, false))
+			d->setExactEssiTiming(true);
 #ifdef __APPLE__
 		// a background run of the journeys on a person's Mac (mdBackgroundRun.h): the standalone's audio runs as
 		// ever, timing and all, but nothing reaches their speakers
@@ -969,6 +973,26 @@ namespace mdJucePlugin
 		{
 			if(auto* const device = dynamic_cast<md::Device*>(_device))
 				device->setSpeedUps(!_legacy);
+		});
+	}
+
+	void AudioPluginAudioProcessor::setExactEssiTiming(const bool _on)
+	{
+		getConfig().setValue(g_exactEssiTimingKey, _on);
+		getConfig().saveIfNeeded();
+		getPlugin().withDeviceLocked([_on](synthLib::Device* const _device)
+		{
+			if(auto* const device = dynamic_cast<md::Device*>(_device))
+				device->setExactEssiTiming(_on);
+		});
+	}
+
+	bool AudioPluginAudioProcessor::isExactEssiTiming()
+	{
+		return getPlugin().withDeviceLocked([](synthLib::Device* const _device)
+		{
+			const auto* const device = dynamic_cast<const md::Device*>(_device);
+			return device && device->exactEssiTiming();
 		});
 	}
 

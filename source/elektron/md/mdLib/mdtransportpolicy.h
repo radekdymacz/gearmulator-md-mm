@@ -20,15 +20,15 @@ namespace md
 		uint64_t hostTransmitBackpressureReleaseUcCycles;
 		// The serial clock wakes the DSP at the exact cycle of its next slot instead of at half the remaining
 		// cycles converted to instructions (dsp56k::EsxiClock::usesExactCycleDeadline). The first value is the
-		// emulation with the speed-ups off (md::Hardware::setSpeedUps), the second with them on: on the
-		// Machinedrum it is speed-up L3 (doc/modern-ux/RESEARCH-emulation-cpu.md 3.4), which changes its audio
-		// once; the Monomachine has always run exact.
+		// default emulation, the second the one with L3 opted in (md::Hardware::setExactEssiTiming, and only with
+		// the speed-ups on): on the Machinedrum L3 (doc/modern-ux/RESEARCH-emulation-cpu.md 3.4) changes its
+		// audio, so it is off unless asked for; the Monomachine has always run exact.
 		bool exactEssiCycleDeadlines;
-		bool exactEssiCycleDeadlinesSpeedUps;
+		bool exactEssiCycleDeadlinesL3;
 
-		bool exactEssiCycleDeadlinesFor(const bool _speedUps) const
+		bool exactEssiCycleDeadlinesFor(const bool _l3) const
 		{
-			return _speedUps ? exactEssiCycleDeadlinesSpeedUps : exactEssiCycleDeadlines;
+			return _l3 ? exactEssiCycleDeadlinesL3 : exactEssiCycleDeadlines;
 		}
 	};
 

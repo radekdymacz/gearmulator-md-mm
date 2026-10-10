@@ -153,6 +153,8 @@ namespace md
 		// GEARMULATOR_MDMM_SIM_DEFERRAL=0 turns off the SIM's event-driven stepping (L5) alone.
 		const auto* const simDeferral = std::getenv("GEARMULATOR_MDMM_SIM_DEFERRAL");
 		m_simDeferral = simDeferral == nullptr || std::strcmp(simDeferral, "0") != 0;
+		const auto* const exactEssi = std::getenv("GEARMULATOR_MDMM_EXACT_ESSI");
+		m_exactEssiTiming = exactEssi != nullptr && std::strcmp(exactEssi, "1") == 0;
 		const auto* const speedUps = std::getenv("GEARMULATOR_MDMM_SPEEDUPS");
 		setSpeedUps(speedUps == nullptr || std::strcmp(speedUps, "0") != 0);
 
@@ -1665,7 +1667,7 @@ namespace md
 	{
 		// Takes effect at each DSP's next peripheral run: the deadline already scheduled is kept (in cycles
 		// when it was exact, in instructions when not) and the next one uses the new mode.
-		const bool exact = transportPolicy(m_model).exactEssiCycleDeadlinesFor(m_speedUps);
+		const bool exact = transportPolicy(m_model).exactEssiCycleDeadlinesFor(exactEssiTimingActive());
 		m_dspMixer.getPeriph().getEssiClock().setExactCycleDeadlineEnabled(exact);
 		m_dspProducer.getPeriph().getEssiClock().setExactCycleDeadlineEnabled(exact);
 	}

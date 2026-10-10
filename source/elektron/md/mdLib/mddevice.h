@@ -151,11 +151,15 @@ namespace md
 		}
 		void setRamRecordingMode(RamRecordingMode _mode);
 		RamRecordingMode ramRecordingMode() const { return m_ramRecordingMode; }
-		// Tester switch for the step 1 speed-ups (Hardware::setSpeedUps; the starting value follows
-		// GEARMULATOR_MDMM_SPEEDUPS). Kept across project state restores, which replace the Hardware.
+		// Tester switch for the speed-ups of steps 1 and 2 (Hardware::setSpeedUps; on unless
+		// GEARMULATOR_MDMM_SPEEDUPS=0). Kept across project state restores, which replace the Hardware.
 		// Requires the owning Plugin device lock.
 		void setSpeedUps(bool _on);
 		bool speedUps() const { return m_speedUps; }
+		// L3's opt-in, off by default (Hardware::setExactEssiTiming; GEARMULATOR_MDMM_EXACT_ESSI=1 starts it on).
+		// Kept across restores like the speed-ups. Requires the owning Plugin device lock.
+		void setExactEssiTiming(bool _on);
+		bool exactEssiTiming() const { return m_exactEssiTiming; }
 		uint64_t hardwareEpoch() const { return m_hardwareEpoch; }
 		// All import lifecycle calls require the owning Plugin/processor lock.
 		// Payload ownership remains in TurboMidiTransfer; dialogs carry only tickets.
@@ -264,6 +268,7 @@ namespace md
 		bool m_nativeProgramChangesEnabled = true;
 		RamRecordingMode m_ramRecordingMode = RamRecordingMode::Original;
 		bool m_speedUps = true;
+		bool m_exactEssiTiming = false;
 		std::string m_mdFlashCacheFilename;
 		uint64_t m_hardwareEpoch = 0;
 		const uint64_t m_sysexDeviceId;

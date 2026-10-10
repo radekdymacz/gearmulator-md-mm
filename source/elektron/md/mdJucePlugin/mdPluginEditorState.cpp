@@ -137,7 +137,7 @@ namespace mdJucePlugin
 					processor.setRamRecordingMode(md::RamRecordingMode::Original);
 				}, {}, mode == md::RamRecordingMode::Original, available));
 		}
-		// For testers: tells in minutes whether a problem comes from the step 1 speed-ups of the emulation.
+		// For testers: tells in minutes whether a problem comes from the speed-ups of the emulation.
 		// Same audio either way; ticked is the slower emulation of before.
 		developer.push_back(separator());
 		const bool legacyEmulation = processor.isLegacyEmulation();
@@ -146,6 +146,17 @@ namespace mdJucePlugin
 			{
 				processor.setLegacyEmulation(!legacyEmulation);
 			}, {}, legacyEmulation));
+		// L3, opt-in, Machinedrum only: its serial ports on exact cycle deadlines. Changes the sound; only acts while
+		// the speed-ups are on (greyed out otherwise).
+		if(processor.getModel() == md::MachineModel::Machinedrum)
+		{
+			const bool exactEssi = processor.isExactEssiTiming();
+			developer.push_back(action("exact-essi-timing", "Exact MD audio timing (experimental, changes the sound)",
+				[&processor, exactEssi]
+				{
+					processor.setExactEssiTiming(!exactEssi);
+				}, {}, exactEssi, !legacyEmulation));
+		}
 		m.items.push_back(submenu("developer", "Developer", std::move(developer)));
 		return m;
 	}
