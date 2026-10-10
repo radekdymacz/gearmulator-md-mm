@@ -386,19 +386,25 @@ namespace dsp56k
 
 	void JitUnittests::pollLoopFastForward()
 	{
-		// The Monomachine's two DMA poll loops, word for word (DSP1 p:17f, DSP2 p:18d), on a DSP56303, run in slices as
-		// in nopLoopFastForward. Between slices the host moves the polled DMA register, so the loop is left and entered
+		// The Monomachine's two DMA poll loops, word for word (DSP1 p:17f, DSP2 p:18d), and a jset on a DMA register
+		// that jumps to itself (the Machinedrum's p:cf has one, below P:$100), on a DSP56303, run in slices as in
+		// nopLoopFastForward. Between slices the host moves the polled DMA register, so the loop is left and entered
 		// again; with an ESSI deadline in cycles and an instruction target. The state after every slice must be the
-		// same without the fast-forward code, with it off and with it on; and on must skip. A block that is not an idle
-		// poll (a loop-carried register) must never be fast-forwarded.
-		constexpr TWord loopPC = 0x100;
-
-		struct Program { std::array<TWord, 5> words; TWord dmaRegister; bool idle; };
+		// same without the fast-forward code, with it off and with it on; and on must skip. A block that is not an
+		// idle poll (a loop-carried register) must never be fast-forwarded.
+		struct Program { TWord base; std::vector<TWord> words; TWord dmaRegister; TWord idleValue; TWord leaveValue; bool idle; };
 		const Program programs[] =
 		{
-			{{0x084e2b, 0x200054, 0x000000, 0x200045, 0x0597dc}, XIO_DSR1, true},	// movep x:DSR1,a; sub y0,a; nop; cmp x0,a; blt *-4
-			{{0x084e2e, 0x200054, 0x202b60, 0x200045, 0x0597dc}, XIO_DDR0, true},	// movep x:DDR0,a; sub y0,a; add x1,a ifmi; cmp x0,a; blt
-			{{0x084f2e, 0x200050, 0x000000, 0x200045, 0x0597dc}, XIO_DDR0, false},	// movep x:DDR0,b; add y0,a: a carries from the turn before
+			// movep x:DSR1,a; sub y0,a; nop; cmp x0,a; blt *-4 (loops while the register is below x0 = $100)
+			{0x100, {0x084e2b, 0x200054, 0x000000, 0x200045, 0x0597dc}, XIO_DSR1, 0x10, 0x180, true},
+			// movep x:DDR0,a; sub y0,a; add x1,a ifmi; cmp x0,a; blt *-4
+			{0x100, {0x084e2e, 0x200054, 0x202b60, 0x200045, 0x0597dc}, XIO_DDR0, 0x10, 0x180, true},
+			// movep x:DDR0,b; add y0,a; nop; cmp x0,a; blt *-4: a carries from the turn before
+			{0x100, {0x084f2e, 0x200050, 0x000000, 0x200045, 0x0597dc}, XIO_DDR0, 0x10, 0x180, false},
+			// jset #4,x:DCR0,* (loops while bit 4 is set; DE stays clear, so no transfer starts)
+			{0x100, {0x0aaca4, 0x000100}, XIO_DCR0, 0x10, 0x00, true},
+			// the same below P:$100, where blocks may also run as fast interrupts
+			{0x0cf, {0x0aaca4, 0x0000cf}, XIO_DCR0, 0x10, 0x00, true},
 		};
 
 		struct Case { uint32_t instructionTarget; uint32_t cycleDeadline; };
@@ -422,15 +428,18 @@ namespace dsp56k
 
 					auto config = testDsp.getJit().getConfig();
 					config.maxDoIterations = 4;
+					config.dynamicFastInterrupts = true;
 					config.pollLoopFastForward = _mode != Mode::Legacy;
 					testDsp.getJit().setConfig(config);
 
 					testDsp.resetHW();
 
-					TWord pc = loopPC;
+					TWord pc = program.base;
 					for(const auto w : program.words)
 						testDsp.memWriteP(pc++, w);
-					const auto jmp = assembler.assemble("jmp $100");
+					std::stringstream jmpText;
+					jmpText << "jmp $" << std::hex << program.base;
+					const auto jmp = assembler.assemble(jmpText.str().c_str());
 					verify(jmp.success());
 					testDsp.memWriteP(pc, jmp.word[0]);
 
@@ -438,9 +447,9 @@ namespace dsp56k
 					testDsp.x0(0x000100);
 					testDsp.x1(0);
 					testDsp.y0(0);
-					testPeripheralsX.write(program.dmaRegister, 0x10);
+					testPeripheralsX.write(program.dmaRegister, program.idleValue);
 
-					testDsp.setPC(loopPC);
+					testDsp.setPC(program.base);
 					testDsp.setIdleFastForward(_mode == Mode::On);
 					testPeripheralsX.resetDelayCycles(testDsp.getInstructionCounter(), c.instructionTarget);
 					if(c.cycleDeadline)
@@ -455,16 +464,16 @@ namespace dsp56k
 					};
 
 					uint64_t target = testDsp.getCycles();
-					TWord dmaValue = 0x10;
+					bool leave = false;
 					for(const uint64_t step : {37ull, 500ull, 1ull, 4999ull, 12345ull, 3ull, 40000ull})
 					{
 						target += step;
 						testDsp.execUntilCycles(target);
 						record();
 
-						// the host moves the register: past x0 (the loop is left), or back below it
-						dmaValue = dmaValue < 0x100 ? 0x180 : 0x20;
-						testPeripheralsX.write(program.dmaRegister, dmaValue);
+						// the host moves the register: out of the loop, or back in
+						leave = !leave;
+						testPeripheralsX.write(program.dmaRegister, leave ? program.leaveValue : program.idleValue);
 
 						const auto stop = testDsp.getCycles() + step / 2 + 1;
 						const DSP::ScopedFastForwardLimit limit(testDsp, stop);
@@ -472,8 +481,8 @@ namespace dsp56k
 							testDsp.execJit();
 						record();
 
-						if(dmaValue >= 0x100)
-							testPeripheralsX.write(program.dmaRegister, 0x30);
+						if(leave)
+							testPeripheralsX.write(program.dmaRegister, program.idleValue);
 					}
 
 					const auto skipped = testDsp.getFastForwardedTurns();

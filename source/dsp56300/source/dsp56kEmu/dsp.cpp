@@ -381,7 +381,8 @@ namespace dsp56k
 		if(!m_idleFastForward || !m_fastForwardCycleLimit || !_instructionsPerTurn || !_cyclesPerTurn)
 			return;
 
-		if(m_interruptFunc != m_execPeripheralsFunc)
+		// a block below P:$100 that just ran as a fast interrupt is no loop
+		if(m_interruptFunc != m_execPeripheralsFunc || m_processingMode != Default)
 			return;
 
 		// the most turns t with every boundary 0..t passing: count + t * perTurn < target (0 if this one fails)

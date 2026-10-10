@@ -80,14 +80,38 @@ namespace dsp56k
 			}
 		}
 
+		bool isDmaRegister(const TWord _addr)
+		{
+			return _addr >= XIO_DCR5 && _addr <= XIO_DSTR;
+		}
+
+		// jclr/jset/brclr/brset #n,x:pp,target on a DMA register: reads it and branches, nothing else
+		template<Instruction Inst> bool isDmaBitTestBranch(const TWord _op)
+		{
+			if(getFieldValue<Inst, Field_S>(_op))
+				return false;	// Y space
+			return isDmaRegister(getFieldValue<Inst, Field_pppppp>(_op) + 0xffffc0);
+		}
+
+		bool isDmaBitTestBranch(const Instruction _inst, const TWord _op)
+		{
+			switch(_inst)
+			{
+			case Jclr_pp:	return isDmaBitTestBranch<Jclr_pp>(_op);
+			case Jset_pp:	return isDmaBitTestBranch<Jset_pp>(_op);
+			case Brclr_pp:	return isDmaBitTestBranch<Brclr_pp>(_op);
+			case Brset_pp:	return isDmaBitTestBranch<Brset_pp>(_op);
+			default:		return false;
+			}
+		}
+
 		bool isDmaRegisterRead(const Instruction _inst, const TWord _op)
 		{
 			if(_inst != Movep_Spp)
 				return false;
 			if(getFieldValue<Movep_Spp, Field_W>(_op) || getFieldValue<Movep_Spp, Field_s>(_op))
 				return false;	// a write, or Y space
-			const TWord addr = getFieldValue<Movep_Spp, Field_pppppp>(_op) + 0xffffc0;
-			return addr >= XIO_DCR5 && addr <= XIO_DSTR;
+			return isDmaRegister(getFieldValue<Movep_Spp, Field_pppppp>(_op) + 0xffffc0);
 		}
 	}
 
@@ -118,8 +142,10 @@ namespace dsp56k
 		// A block that ends in a conditional branch to its own start, and whose turns repeat each other: it reads only
 		// DMA registers, writes no memory, and no register it reads carries a value from the turn before (every one
 		// is either never written in the block or written before it is read). The words are the ones in P memory now:
-		// a write to them destroys the block.
-		if(!m_config.pollLoopFastForward || _isFastInterrupt)
+		// a write to them destroys the block. Below P:$100 a block may also run as a fast interrupt: there only a
+		// lone bit-test branch qualifies (jset #n,x:DCR0,*), and only with the processing mode tested at run time
+		// (dynamic fast interrupts; DSP::fastForwardPollLoop skips nothing outside the default mode).
+		if(!m_config.pollLoopFastForward || (_isFastInterrupt && !m_config.dynamicFastInterrupts))
 			return false;
 		if(_info.terminationReason != JitBlockInfo::TerminationReason::Branch || _info.branchTarget != _pc || !_info.branchIsConditional)
 			return false;
@@ -149,9 +175,14 @@ namespace dsp56k
 
 			const bool last = q + len == _info.memSize;
 
+			if(_isFastInterrupt && (q || !last))
+				return false;
+
 			if(last)
 			{
-				if(instB != Invalid || (instA != Bcc_xxxx && instA != Bcc_xxx && instA != Jcc_xxx))
+				if(instB != Invalid)
+					return false;
+				if(instA != Bcc_xxxx && instA != Bcc_xxx && instA != Jcc_xxx && !isDmaBitTestBranch(instA, opA))
 					return false;
 			}
 			else if(instA == Nop)

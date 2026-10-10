@@ -67,9 +67,9 @@ The speed-ups the switch controls:
   of at half the remaining cycles converted to instructions, so the DSPs are no longer stopped several times on
   the way to each slot. This one changes the Machinedrum's audio (above).
 - **L4** (step 2, both machines) the DSPs skip the turns of their idle loops that would only pass through the
-  dispatcher, up to the next moment anything is due: the silent-voice NOP loops (both machines) and the loops that
-  wait on a DMA register (the Monomachine's; the Machinedrum's wait below P:$100 or on Port C, which do not
-  qualify). Bit-exact: the same audio as without it, in both positions.
+  dispatcher, up to the next moment anything is due: the silent-voice NOP loops and the loops that wait on a DMA
+  register (both machines; not the loops that wait on Port C). Bit-exact: the same audio as without it, in both
+  positions.
 
 Two finer environment variables exist for narrowing a problem down further. Both are environment
 variables only:
