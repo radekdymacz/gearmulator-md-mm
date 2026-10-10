@@ -1,7 +1,0 @@
-macro(removeGlob PATTERN)
-	file(GLOB filesToRemove LIST_DIRECTORIES false "${PATTERN}")
-	foreach(f ${filesToRemove})
-		message(STATUS "Removing file ${f}")
-		file(REMOVE "${f}")
-	endforeach()
-endmacro()

@@ -5,9 +5,7 @@ option(${CMAKE_PROJECT_NAME}_SYNTH_ELEKTRON "Build Machinedrum and Monomachine" 
 # ----------------- Add our cmake scripts to IDE
 
 add_custom_target(cmakeScripts SOURCES 
-	changelog.cmake
 	exporttarget.cmake
-	findvst2.cmake 
 	juce.cmake 
 	macsetup.cmake 
 	macsetup.command.in 
@@ -15,10 +13,6 @@ add_custom_target(cmakeScripts SOURCES
 	skins.cmake
 	skins.h.in
 	../base.cmake)
-
-# ----------------- Tools
-
-add_subdirectory(changelogGenerator)
 
 # ----------------- DSP56300 emulator
 
@@ -39,7 +33,6 @@ add_subdirectory(3rdparty)
 include(macsetup.cmake)
 include(skins.cmake)
 include(exporttarget.cmake)
-include(changelog.cmake)
 
 # ----------------- network bridge
 
@@ -51,19 +44,12 @@ add_subdirectory(bridge)
 
 # MCP server is always built, but can be enabled/disabled at runtime via plugin settings
 
-# ----------------- Try to install VST2 SDK
-
-include(findvst2.cmake)
-
 # ----------------- Juce based audio plugin dependencies
 
 set_property(GLOBAL PROPERTY USE_FOLDERS YES)
 if(${CMAKE_PROJECT_NAME}_BUILD_JUCEPLUGIN)
 	set(JUCE_ENABLE_MODULE_SOURCE_GROUPS ON CACHE BOOL "" FORCE)
 	add_subdirectory(JUCE EXCLUDE_FROM_ALL)
-	if(${CMAKE_PROJECT_NAME}_BUILD_JUCEPLUGIN_CLAP)
-		add_subdirectory(clap-juce-extensions)
-	endif()
 	# Visual Studio omits test executables from an excluded subdirectory's
 	# top-level solution, so explicit `cmake --build --target` calls cannot find
 	# them. Keep normal release builds lazy while making shared tests addressable
