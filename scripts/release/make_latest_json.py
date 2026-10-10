@@ -20,6 +20,8 @@ sys.dont_write_bytecode = True  # no __pycache__ in the repository
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sign_update  # noqa: E402
 
+# The repository is radekdymacz/mdmm since 2026-10-10. Keep the old name here: apps up to 0.4.0 accept only
+# URLs under it (updateCore.h), and GitHub redirects the old name to the new one.
 REPO = "radekdymacz/gearmulator-md-mm"
 SITE = "https://mdmm.dev"
 TAG_RE = re.compile(r"^mdmm-v([0-9]+\.[0-9]+\.[0-9]+)$")

@@ -36,7 +36,10 @@ namespace mdmmUpdate
 	const char* machineKey(Machine _m);		// "md", "mm"
 	// The fixed release asset name for an OS and a machine (the site's download links use the same).
 	const char* assetName(Os _os, Machine _m);
+	// The repository was renamed gearmulator-md-mm -> mdmm (2026-10-10). Apps up to 0.4.0 accept only the old
+	// prefix, so latest.json keeps writing it (GitHub redirects the old name); from 0.5 both are accepted.
 	constexpr const char* g_repoDownloads = "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/";
+	constexpr const char* g_repoDownloadsRenamed = "https://github.com/radekdymacz/mdmm/releases/download/";
 	constexpr const char* g_manifestUrl = "https://mdmm.dev/latest.json";
 	constexpr const char* g_downloadPage = "https://mdmm.dev/get/";
 	constexpr uint64_t g_maxManifestBytes = 64 * 1024;

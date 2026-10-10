@@ -254,7 +254,8 @@ namespace mdmmUpdate
 					return fail(where + ": not the release's name for it");
 				asset.name = *name;
 				const auto* url = stringOf(*a, "url");
-				if(!url || *url != std::string(g_repoDownloads) + m.tag + "/" + asset.name)
+				const auto suffix = m.tag + "/" + asset.name;
+				if(!url || (*url != std::string(g_repoDownloads) + suffix && *url != std::string(g_repoDownloadsRenamed) + suffix))
 					return fail(where + ": not this repository's release URL");
 				asset.url = *url;
 				const auto* size = a->find("size");
