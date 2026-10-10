@@ -1300,17 +1300,34 @@ const MmJourneys = (() => {
 	const shotsGlobal = { name: "mm-shots-global", needs: () => !/mm-shots/.test(location.search) ? "screenshots only when asked by name" : null,
 		steps: [{ say: "open GLOBAL", act: async u => { u.click("#globkey"); await sleep(800); shot("global-mm"); }, screen: () => ok(!$1("#globpop").hidden, "closed"), hold },
 			{ say: "Esc", act: u => { u.key("Escape"); shot("done"); } }] };
+	/* B-056: the GEN bar's room, R and Defaults inside the bar in Random and in Euclid (the roll's Draw and length keys
+	   beside it): a MEASURE line each, with the bar's fit step (76-gen.js genBarFit) and the page's text floor (what 9 px
+	   text becomes: more on a page zoomed below 100 %, where WebKit raises 9 to 15 px text, as in --background's small
+	   window). mm-gen-bar-fit in every run, mm-shots-sound with its snapshots. */
+	const genRoom = () => { const b = $1("#genband").getBoundingClientRect(), k = $1("#genband .gkeys").getBoundingClientRect(); return Math.round(b.right - k.right); };
+	const textFloor = () => { const x = document.createElement("span"); x.style.fontSize = "9px"; document.body.appendChild(x); const v = parseFloat(getComputedStyle(x).fontSize); x.remove(); return v.toFixed(2); };
+	const genBarFits = (label, snap = false) => ({ say: `the GEN bar on ${label}: Random and Euclid, R and Defaults inside the bar`, act: async (u, c) => {
+		c.room = []; c.cut = [];
+		const w = e => Math.round(e.getBoundingClientRect().width), parts = q => $1(q) ? [...$1(q).children].map(e => (e.className || e.tagName).split(" ")[0] + "=" + w(e)).join(" ") : "-";
+		for (const kind of ["random", "euclid"]) {
+			u.click(`[data-genkind="${kind}"]`); await sleep(400);
+			const room = genRoom(), fit = [...$1(".genbar").classList].filter(k => /^fit\d$/.test(k)).pop() || "fit0";
+			c.room.push(`${kind} ${room} (${fit})`); if (room < -1) c.cut.push(kind);
+			Bridge.log(`MEASURE gen-mm ${label} ${kind} room ${room} ${fit} groups cut ${(fl => fl ? fl.scrollWidth - fl.clientWidth : "-")($1("#genband .gflow"))} text floor ${textFloor()} at ${innerWidth} x ${innerHeight} bar [${parts(".genbar")}] groups [${parts("#genband .gflow")}]`);
+			if (snap) { await sleep(400); Journey.snapshot(kind === "euclid" ? "gen-mm" : "gen-mm-" + kind); }
+		} },
+		screen: c => ok(!c.cut.length, "R and Defaults cut off: " + c.room.join(", ")) });
+	const genBarFit = { name: "mm-gen-bar-fit",
+		steps: [go("seq"), sel(0), genBarFits("track 1"),
+			{ say: "click MIDI: a MIDI track", act: u => u.click('[data-side="midi"]'), screen: () => ok(S().side === "midi" && S().sel >= 6, `side ${S().side}, track ${S().sel}`) },
+			genBarFits("a MIDI track"),
+			{ say: "click SYNTH: back", act: u => u.click('[data-side="int"]'), screen: () => ok(S().side !== "midi" && S().sel < 6, `side ${S().side}`) }] };
 	/* 0.5 slice 5: the Sound page and the GEN bar as screenshots, beside the Machinedrum Editor's (md-shots-sound) */
 	const shotsSound = { name: "mm-shots-sound", needs: () => !/mm-shots/.test(location.search) ? "screenshots only when asked by name" : null,
 		steps: [go("sound"), sel(0),
 			{ say: "the Sound page", act: async () => { await sleep(800); shot("sound-mm"); Journey.snapshot("sound-mm"); Bridge.log("MEASURE sound-mm screens " + [...document.querySelectorAll(".snd .sg>.plot")].map(e => Math.round(e.getBoundingClientRect().height)).join(" ") + " page " + Math.round(document.querySelector(".snd").scrollHeight) + "/" + Math.round(document.querySelector("#main").clientHeight)); }, hold },
-			go("seq"),
-			{ say: "the GEN bar: Euclid and Random, its keys inside the bar", act: async u => {
-				const fits = () => { const b = $1("#genband").getBoundingClientRect(), k = $1("#genband .gkeys").getBoundingClientRect(); return Math.round(b.right - k.right); };
-				const m = []; for (const kind of ["random", "euclid"]) { u.click(`[data-genkind="${kind}"]`); await sleep(400); m.push(kind + " " + fits()); }
-				Bridge.log("MEASURE gen-mm room " + m.join(", ") + " at " + innerWidth); },
-				screen: () => ok($1("#genband .gkeys").getBoundingClientRect().right <= $1("#genband").getBoundingClientRect().right + 1, "R and Defaults cut off") },
-			{ say: "the GEN bar", act: async () => { await sleep(800); shot("gen-mm"); Journey.snapshot("gen-mm"); }, hold },
+			go("seq"), genBarFits("track 1", true),
+			{ say: "the GEN bar", act: async () => { await sleep(400); shot("gen-mm"); }, hold },
 			{ say: "done", act: () => shot("done") }] };
 	/* B-054: every view, as macOS 12's WebKit 15 lays it out (Journey.viewJourneys: mm-old-webkit in every run,
 	   mm-shots-views for scripts/mdmm-snap.py --safari15) */
@@ -1339,7 +1356,7 @@ const MmJourneys = (() => {
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, syxImportMute, osCopyPaste, rotateUndo, faderUndo, tapTempoShift, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal, shotsSound, ...viewJs];
+		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, syxImportMute, osCopyPaste, rotateUndo, faderUndo, tapTempoShift, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal, genBarFit, shotsSound, ...viewJs];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }

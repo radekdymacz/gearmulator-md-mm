@@ -108,8 +108,8 @@ function genStripHtml(){const t=S.sel,tr=trk(t),sp=genSpec(t),all=S.alt,[from,to
  else if(all)sum=`every track · steps ${from+1}–${to}`;
  const target=all?`all ${isMidiT(t)?"MIDI":"synth"} tracks`:`${tLabel(t)} · ${isMidiT(t)?"CH"+String(tr.ch).padStart(2,"0"):tr.m.replace("SWAVE-","SW-")}`;
  return`${gtitle("Gen",target,all,"Generators: every change writes to the pattern at once. A run of changes on this track is one undo step; Undo takes it back in one step. Alt: every track of the side shown, the whole pattern.")}
-  ${mode}${params}${genNotesHtml(sp,t)}
-  <div class="gsum" title="${run&&run.applied?"What the run changed, against the pattern before it":"What a change writes"}">${sum}</div>
+  <div class="gflow">${mode}${params}${genNotesHtml(sp,t)}
+  <div class="gsum" title="${run&&run.applied?"What the run changed, against the pattern before it":"What a change writes"}">${sum}</div></div>
   <div class="gkeys">${randKey(all?"Randomise every track of the side: a new variation of each spec, the whole pattern (Alt+R)":`Randomise ${tLabel(t)}: a new variation, ${sp.kind==="random"?"a new seed":sp.kind==="euclid"?"random hits and rotation in the cycle, a new seed for the notes":"nothing while it is set to Keep"} (R). Alt+R or Alt-click: every track`)}${kc("data-gen","fill","↺","Defaults","Defaults: every track's spec from its machine: a bass 5/16 with a walk in its scale, a lead random 30 % over two octaves, a pad on 1 and 3, the drum box 8/16 on BD SD CH OH; FX machines kept; MIDI tracks 4/16, rhythm only. Writes this track (Alt: every track)")}</div>`}
 /* the step gestures behind a small ? key (a click: the list of keys) */
 function stepLegend(){const midi=isMidiT(S.sel),row=(cls,what,how)=>`<span>${cls!=null?`<i class="lg on ${cls}"></i>`:`<i class="lg none"></i>`}<b>${what}</b>${how}</span>`;
@@ -118,7 +118,14 @@ function genBarHtml(){return`<div class="genbar"><div class="genband" id="genban
 /* a rail tag's tooltip: the spec and its notes */
 function genTip(t){const sp=genSpec(t),n=isMidiT(t)?"":mmNotesTag(sp,noteName);return`${genTag(sp)}${n?" · "+n:""}: ${tLabel(t)}'s generator (the GEN bar)`}
 /* the bar again (and the rail's spec tags), without a full render */
-function genDraw(){if(S.ws!=="seq")return;const host=$("#genband");if(host)host.innerHTML=genStripHtml();$$(".th[data-sel] .gtag").forEach(g=>{g.textContent=genTag(genSpec(+g.closest(".th").dataset.sel))})}
+function genDraw(){if(S.ws!=="seq")return;const host=$("#genband");if(host)host.innerHTML=genStripHtml();genBarFit();$$(".th[data-sel] .gtag").forEach(g=>{g.textContent=genTag(genSpec(+g.closest(".th").dataset.sel))})}
+/* The bar's room (B-056): R and Defaults sit outside the groups (.gflow), so they always show and a group is cut
+   instead; and the bar tightens in steps (fit1..fit3, 25-mm.css) until its groups fit. Measured, not a media query:
+   a page zoomed below 100 % (a window under 1440 x 720 points, or the user's zoom) has its 9 to 15 px text raised by
+   WebKit to 9 points on screen (its minimum logical font size), so the same width holds less there. */
+const GEN_BAR_FITS=["fit1","fit2","fit3"];
+function genBarFit(){const bar=$(".genbar"),flow=bar&&bar.querySelector(".gflow");if(!flow)return;bar.classList.remove(...GEN_BAR_FITS);
+ for(const f of GEN_BAR_FITS){if(flow.scrollWidth<=flow.clientWidth+1)break;bar.classList.add(f)}}
 
 /* ---- MUTATE ---- */
 const MUT_SCOPES=[["SYN","Syn","the machine's SYNTHESIS page (an FX machine's INP stays)"],["AMP","Amp","the AMP page (VOL stays)"],["FLT","Flt","the FILTER page"],["EFX","Efx","the EFFECTS page"],["LFO","Lfo","the three LFOs (their PAGE and DEST stay: where an LFO goes is routing)"]];
