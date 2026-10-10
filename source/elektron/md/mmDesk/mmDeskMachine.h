@@ -158,6 +158,9 @@ namespace mmDesk
 		void pumpSequence(double _now);
 		// RECORD: the current pattern read back while the machine records (true: the mode changed).
 		bool readWhileRecording(double _now);
+		// LIVE RECORDING: a kit value the editor sends (a CC) is recorded by the firmware as a lock on the step that plays
+		// when it arrives (measured, mmDeskFirmwareTest reclock); the desk names that step for about 3 s (machine.desk.recLock).
+		void noteRecLock(const elektronData::MmKit& _before, const elektronData::MmKit& _after, const ChannelReach& _reach);
 		// The transport's telemetry message (the playhead, playing, the recording mode).
 		void publishTransport(double _now, bool _recordChanged);
 		void applyWorkingKit(double _now, const Documents& _view);
@@ -258,6 +261,8 @@ namespace mmDesk
 		deskCore::FieldExpectation<bool> m_expectPoly;
 		deskCore::FieldExpectation<int> m_expectTempo;
 		RecordReads m_recordReads;		// RECORD's read-backs (watchRecord)
+		struct RecLock { int track = 0, param = 0, step = 0; double atMs = 0; };
+		std::optional<RecLock> m_recLock;	// the step the last value sent while LIVE RECORDING locks (noteRecLock)
 		int m_queuedPattern = -1;
 		TelemetryOut m_telemetryOut;	// the transport message last published (telemetryDue)
 		double m_lastStatusMs = -1e9;

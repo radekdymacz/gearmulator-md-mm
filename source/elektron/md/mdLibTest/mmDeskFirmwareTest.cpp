@@ -5,7 +5,8 @@
 //   mmDeskFirmwareTest <MM-ROM> [only]   only one part, e.g. machine (B-027: a machine change stays), pianoroll
 //                                        (B-050), ampenv (B-049: the amp envelope the editor draws is the firmware's),
 //                                        notelength (I-010: the piano roll's note lengths, stored and played),
-//                                        kitlink (B-053: the kit a pick of an A-D or E-H pattern plays)
+//                                        kitlink (B-053: the kit a pick of an A-D or E-H pattern plays), reclock
+//                                        (live recording: the step a value sent locks)
 //
 // Exits 77 (skip) without arguments.
 
@@ -3452,6 +3453,125 @@ namespace
 	}
 }
 
+namespace
+{
+	// recLock (MM parity, manual 1-49 / 1-57): while LIVE RECORDING, a kit value the editor sends (a CC on the track's
+	// channel) becomes a parameter lock on the step that plays when it arrives, a step without a trig too (measured:
+	// steps 1-6 of a pattern with trigs on 1, 5, 9, 13). The desk names that step (machine.desk.recLock) and the
+	// machine's pattern then holds the lock there. MM_RECLOCK="step page index" moves it (default "2 2 1": FILTER's
+	// second value on step 3).
+	void recLock(const Bytes& _rom)
+	{
+		std::puts("recLock (live recording)");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		const uint8_t slot = static_cast<uint8_t>(r.desk->currentPattern());
+		auto p = *r.desk->pattern(slot);
+		p.length = 16;
+		for(auto* m : {&p.amp, &p.filter, &p.lfo, &p.noteOff, &p.midiTrig, &p.midiNoteOff, &p.pitch, &p.chord, &p.midiNote, &p.slide, &p.midiSlide})
+			m->fill(0);
+		for(auto& n : p.notes)
+			n.fill(ed::MmPattern::g_noNote);
+		for(auto& m : p.lockMasks)
+			m.fill(0);
+		for(auto& row : p.lockRows)
+			row.fill(ed::MmPattern::g_noLock);
+		p.lockRowCount = 0;
+		p.chordNotes.fill(0xffff);
+		p.chordNoteCount = 0;
+		p.midiNotes.fill(0xffff);
+		p.midiNoteCount = 0;
+		for(const uint8_t st : {0, 4, 8, 12})
+		{
+			for(auto* m : {&p.pitch, &p.amp, &p.filter, &p.lfo})
+				(*m)[0] |= ed::mmStepBit(st);
+			p.notes[0][st] = 48;
+		}
+		r.msg(R"({"op":"set","kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+		r.run(3000);
+		int atStep = 2, page = 2, index = 1;
+		if(const char* e = std::getenv("MM_RECLOCK"))
+		{
+			std::istringstream in(e);
+			in >> atStep >> page >> index;
+		}
+		r.msg(R"({"op":"tempo","bpm":60})");
+		r.msg(R"({"op":"play"})");
+		r.run(1000);
+		r.msg(R"({"op":"record","mode":"live"})");
+		r.run(300);
+		std::printf("  recording %d\n", r.tel.recording.load());
+		int guard = 0;
+		while(r.tel.step.load() != 15 && guard++ < 2000)
+			r.run(5);
+		while(r.tel.step.load() != atStep && guard++ < 4000)
+			r.run(2);
+		const auto k = *r.desk->workingKit();
+		const int was = k.tracks[0].pages[static_cast<size_t>(page)][static_cast<size_t>(index)], v = was > 60 ? was - 30 : was + 30;
+		std::printf("  at step %d (index %d): T1 page %d value %d: %d -> %d\n", r.tel.step.load() + 1, r.tel.step.load(), page, index, was, v);
+		const int sentAt = r.tel.step.load();
+		r.msg("{\"op\":\"param\",\"g\":9701,\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":0,\"page\":" + std::to_string(page) + ",\"i\":" + std::to_string(index)
+			+ ",\"v\":" + std::to_string(v) + "}");
+		r.run(50);
+		const auto named = [&]() -> std::optional<std::pair<int, int>>
+		{
+			const Value* doc = nullptr;
+			for(auto it = r.page.rbegin(); it != r.page.rend() && !doc; ++it)
+				if(it->find("type")->asString() == "machine")
+					doc = it->find("doc");
+			const auto* d = doc ? doc->find("desk") : nullptr;
+			const auto* l = d ? d->find("recLock") : nullptr;
+			if(!l || !l->isObject())
+				return std::nullopt;
+			return std::make_pair(static_cast<int>(l->find("param")->asNumber()), static_cast<int>(l->find("step")->asNumber()));
+		};
+		const auto said = named();
+		check(said && said->first == page * 8 + index && said->second == sentAt, "the desk names the step that plays: step " + std::to_string(sentAt + 1)
+			+ (said ? " (said " + std::to_string(said->second + 1) + ")" : " (nothing said)"));
+		r.run(3500);
+		check(!named(), "and stops naming it after about 3 s");
+		r.msg(R"({"op":"record","mode":"off"})");
+		r.run(800);
+		r.msg(R"({"op":"stop"})");
+		r.run(1000);
+		const auto q = patternInMemory(r, slot);
+		if(!q)
+		{
+			std::puts("  no pattern read");
+			return;
+		}
+		std::printf("  T1 masks pitch %s amp %s filter %s lfo %s\n", stepList(q->pitch[0], 16).c_str(), stepList(q->amp[0], 16).c_str(), stepList(q->filter[0], 16).c_str(),
+			stepList(q->lfo[0], 16).c_str());
+		std::printf("  lock rows %d:", q->lockRowCount);
+		for(int i = 0; i < q->lockRowCount; ++i)
+		{
+			std::printf(" [row %d mask t%d:", i, 0);
+			for(size_t st = 0; st < 16; ++st)
+				if(q->lockRows[static_cast<size_t>(i)][st] != ed::MmPattern::g_noLock)
+					std::printf(" s%zu=%d", st + 1, q->lockRows[static_cast<size_t>(i)][st]);
+			std::printf("]");
+		}
+		std::puts("");
+		for(uint8_t pg = 0; pg < 7; ++pg)
+			for(uint8_t i = 0; i < 8; ++i)
+			{
+				const auto row = ed::mmLockRow(*q, {0, pg, i});
+				if(row >= 0)
+					std::printf("  T1 page %d value %d locked (row %d)\n", pg, i, row);
+			}
+		const auto row = ed::mmLockRow(*q, {0, static_cast<uint8_t>(page), static_cast<uint8_t>(index)});
+		int landed = -1;
+		for(size_t st = 0; row >= 0 && st < 16 && landed < 0; ++st)
+			if(q->lockRows[static_cast<size_t>(row)][st] == v)
+				landed = static_cast<int>(st);
+		check(said && landed == said->second, "the machine locked the step the desk named (step " + std::to_string(landed + 1) + ")");
+	}
+}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -3548,6 +3668,8 @@ int main(const int _argc, char** _argv)
 			noteLength(rom);
 		if(only.empty() || only == "kitlink")
 			kitLink(rom);
+		if(only.empty() || only == "reclock")
+			recLock(rom);
 		if(only == "lenprobe")
 			midiLenProbe(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());

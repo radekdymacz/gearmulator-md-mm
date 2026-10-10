@@ -126,16 +126,18 @@ Bridge.onMessage(m => {
 /* ===== Fit: the page is laid out for 1440 px. A smaller plug-in window (GUI scale 75 % is 1080 px)
    zooms the whole page out natively (WKWebView pageZoom, mdStudioWebZoom.mm), so nothing is cut. ===== */
 
-/* ===== Tap tempo (manual p.36): T (or B, the Monomachine Editor's tap key, where T is a black key) taps, the
-   average of the last taps sets the tempo (0x61). ===== */
+/* ===== Tap tempo (manual p.36): T or B taps, and ⇧B, the one tap chord of both editors (the Monomachine Editor's B is the
+   piano roll's Draw on Sequence); the average of the last taps sets the tempo (0x61). ===== */
 const TAP = [];
-Keys.bind({ id: "tap-tempo", short: "Tap / Tap", scope: "any", keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: () => {
+function tapTempo() {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
 	if (hostTempoRefused()) { TAP.length = 0; return; }
 	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
 	else toast("Tap tempo: keep tapping T");
-} });
+}
+Keys.bind({ id: "tap-tempo", short: "Tap / Tap", scope: "any", keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: tapTempo });
+Keys.bind({ id: "tap-tempo-shift", short: "Tap", scope: "any", keys: ["B"], mod: "shift", group: "Transport", does: "Tap tempo: ⇧B taps on every workspace of both editors", when: () => kbOn(), run: tapTempo });
 
 /* ===== Control All (manual p.37, FUNCTION + a DATA ENTRY knob; "CTRL + ALL"): Alt held while moving a track
    value moves the same knob on every track by the same amount. One intent, not sixteen: a tweak command

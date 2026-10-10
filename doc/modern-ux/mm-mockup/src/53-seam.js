@@ -16,6 +16,6 @@ const MM_SEAM={
   "playing","step","tempo","engineState","kitState","learnTarget","learning","ctlSetup","show","startEmpty",
   "setPatternSlot","setKitSlot","setReading","setTempo","setInput","setPlaying","setStep","setSongRow","setEng","dlgOpen",
   "setEngineLabel","setEngineTip","setEngines","setAudioEntry","clearLearnTarget","setMapping","setModulation",
-  "setCtlSetup","disable","setRecord","setLcd","setKeyDown","setPst","closeFirmwareDialog","bootRom",
+  "setCtlSetup","disable","setRecord","setRecLock","setLcd","setKeyDown","setPst","closeFirmwareDialog","bootRom",
   "bootInstalled","syxPreview","syxProgress","render","renderTop","drawLib","toast","ask","redraw","movePH",
   "setPos","flashTracks","goWs","clickStep","autoRange","kitSave","redrawAudio","audioLevel","openAudio"]};

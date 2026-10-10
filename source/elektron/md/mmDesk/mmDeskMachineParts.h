@@ -23,6 +23,7 @@ namespace mmDesk::parts
 
 	constexpr double g_readBackTimeoutMs = 8000;
 	constexpr double g_wireReadBackTimeoutMs = 15000;	// DIN speed, behind the library's background read
+	constexpr double g_recLockMs = 3000;				// how long the desk names the step a live-recorded value locks
 	constexpr double g_recordReadMs = 1000;				// while recording: the current pattern read back this often
 	constexpr deskCore::LoadQueue<Ref>::Policy g_loadPolicy{25, 2};
 	constexpr double g_loadTimeoutMs = 400;

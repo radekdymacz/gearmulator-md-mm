@@ -291,6 +291,7 @@ Keys.bind({id:"ms-paint",scope:"any",area:"Tracks",keys:["drag M / S keys"],grou
 Keys.bind({id:"roll-chord",scope:"seq",area:"Roll",keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});
 Keys.bind({id:"roll-paint",scope:"seq",area:"Roll",keys:["roll"],group:"Sequence",does:"Draw on (B): click an empty step: a note there, as long as the Len key says; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (the last one as long as the Len key says; one undo step). Draw off: double-click"});
 Keys.bind({id:"roll-erase",scope:"seq",area:"Roll",keys:["roll"],mod:"alt",group:"Sequence",does:"Click: delete a note, the note before it keeps its length (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step"});
+Keys.bind({id:"lane-draw",scope:"seq",area:"Lock lane",keys:["lock lane"],group:"Sequence",does:"Drag over the bars: lock the lane's parameter on each step with a trig"});
 Keys.bind({id:"lane-erase",scope:"seq",area:"Lock lane",keys:["lock lane"],mod:"alt",group:"Sequence",does:"Drag: erase locks"});
 Keys.bind({id:"lane-clear-all",scope:"seq",area:"Lock lane",keys:["lock lane clear"],mod:"alt",group:"Sequence",does:"Click: clear every lock of the track (all its parameters)"});
 
@@ -547,7 +548,7 @@ window.MMView={
  show,startEmpty,setPatternSlot,setKitSlot,setReading,setTempo:bpm=>{S.bpm=bpm},
  setInput,setPlaying,setStep,setSongRow:r=>{S.songRow=r;markSongRow()},
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,
- setRecord,
+ setRecord,setRecLock,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,

@@ -67,6 +67,11 @@ check(!cap(view({ layer: "alt" }), "KeyA").piano, "the piano is drawn on the pla
 
 /* ---- tips, and the drawing ---- */
 check(mac.tips.length >= 5, `tips from the map: ${mac.tips.length}`);
+/* the MM's view as complete as the MD's (MM parity, slice 4): tips, the zoom keys on ⌘, the pointer's tricks */
+const mmCmd = KV.model(mm, { mac: true, layer: "cmd", page: "seq", all: false, query: "", mapping: false });
+check(mmv.tips.length >= 5 && ["Minus", "Equal", "Digit0"].every(c => /zoom/i.test(JSON.stringify(cap(mmCmd, c) || {}))), `MM: tips (${mmv.tips.length}) and the zoom keys on ⌘`);
+const mmAll = KV.model(mm, { mac: true, layer: "", page: "seq", all: true, query: "", mapping: false });
+check(["Values", "Top bar", "LCD", "GEN bar", "Library", "Lock lane", "Roll"].every(a => JSON.stringify(mmAll).includes(a)), "MM: the mouse's tricks of every area the MD's lists (and the roll's)");
 const h = KV.html(view(), { note: "n", pageName: "Sequence" });
 check(h.includes('data-code="KeyR"') && h.includes('data-kvmod="alt"') && h.includes("Mouse tricks") && h.includes("Every key on this page") && !/undefined|NaN/.test(h), "the drawing renders: keys, layer buttons, tricks, the list");
 check(caps(mac).length >= 70, `a whole keyboard: ${caps(mac).length} keys`);

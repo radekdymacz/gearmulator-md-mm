@@ -133,6 +133,7 @@ namespace mmDesk
 		m_reactivateGlobal = false;
 		m_poly = -1;
 		m_recordReads = {};
+		m_recLock.reset();
 		m_expectMute = {};
 		m_expectPoly = {};
 		m_expectTempo = {};
@@ -345,6 +346,16 @@ namespace mmDesk
 		else
 			desk.set("chain", Value());
 		desk.set("bankGroup", m_tel.bankGroup);
+		if(m_recLock)
+		{
+			Value l = Value::object();
+			l.set("track", m_recLock->track);
+			l.set("param", m_recLock->param);
+			l.set("step", m_recLock->step);
+			desk.set("recLock", std::move(l));
+		}
+		else
+			desk.set("recLock", Value());
 		d.set("desk", std::move(desk));
 		Value r = Value::object();
 		r.set("state", manualDumps() ? (m_manual.empty() ? "idle" : "waitingUser") : m_recv.stateName());

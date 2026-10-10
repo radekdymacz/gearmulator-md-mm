@@ -39,9 +39,9 @@ const run = list.filter(b => b.run), name = b => `${Keys.label(b)} (${b.group})`
 
 /* ---- rule: no ⇧ chords, ⌘ only for the standard edit keys ---- */
 /* and the selection's own (K2, DESIGN-keymap.md §3.2): ⌘A selects every step, ⇧← ⇧→ extend it */
-const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV", "cmd KeyX", "cmd KeyD", "cmd KeyA", "shift ArrowLeft", "shift ArrowRight"]);
+const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV", "cmd KeyX", "cmd KeyD", "cmd KeyA", "shift ArrowLeft", "shift ArrowRight", "shift KeyB"]);
 const badMod = run.filter(b => ids(b).some(id => { const m = b.mod || ""; return m.includes("shift") && !STD_CMD.has(m + " " + id) || m.includes("cmd") && !STD_CMD.has(m + " " + id); }));
-check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V ⌘X ⌘D ⌘A and ⇧← ⇧→ (the selection)" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
+check(!badMod.length, "no ⇧ or ⌘ commands but ⇧B (tap tempo), ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V ⌘X ⌘D ⌘A and ⇧← ⇧→ (the selection)" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
 
 /* ---- rule: no two dispatched entries on one key and modifiers, unless both are conditional and known exclusive ---- */
 /* Escape: each closes what is open (the help, a dialog, LEARN, the paste marks, GLOBAL), one at a time */
@@ -54,7 +54,7 @@ check(!clash.length, "no two dispatched entries share a key and modifiers" + (cl
 
 /* ---- the approved map is there (RULE 1-3) ---- */
 const has = (m, id) => run.some(b => (b.mod || "") === m && ids(b).includes(id));
-const WANT = [["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
+const WANT = [["shift", "KeyB", "tap tempo (⇧B, both editors)"], ["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
 	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyR", "randomise the selected track"], ["", "KeyM", "mute the selected track"], ["", "KeyT", "tap tempo"], ["", "KeyB", "tap tempo (B, the Monomachine Editor's tap key)"],
 	["", "ArrowUp", "previous track"], ["", "ArrowDown", "next track"], ["alt", "KeyR", "randomise all"], ["alt", "KeyM", "mute / unmute all"], ["alt", "Delete", "clear the pattern"],
 	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"], ["cmd", "KeyX", "cut the selected steps"], ["cmd", "KeyD", "duplicate the selected steps"],

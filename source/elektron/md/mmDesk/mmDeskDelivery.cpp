@@ -160,6 +160,7 @@ namespace mmDesk
 				return refuse("Only the kit that plays can be edited live");
 			std::vector<std::string> notes;
 			deliverKitLive(before, after, reach(_view), notes);
+			noteRecLock(before, after, reach(_view));
 			// Pending until memory shows it (or it is too old to wait for); without memory nothing
 			// reads it back: done as sent.
 			if(m_profile.memory)

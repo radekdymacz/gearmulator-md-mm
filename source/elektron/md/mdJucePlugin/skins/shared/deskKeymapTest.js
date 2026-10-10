@@ -32,6 +32,21 @@ const DIFFER = {
 	"tap-tempo": "D6 / K6: the MD keeps T (and B) until its black keys come; MM taps on B only (T is F♯)",
 	"piano-run": "D6 / K6: the MD plays the white keys only until its black keys come"
 };
+/* the ids only one editor has, each with its reason (MM-PARITY-2026-10-09.md): a new one-sided id must be listed here, so
+   a gesture or tip the other editor also has is not missed */
+const ONLY = {
+	md: { "tip-hold-alt": "the ⌥ hints on the MD's keys (Clr becomes All)", "tip-fn": "the MD's FN note", "step-paint": "the MD's trig grid (the MM paints in the roll: roll-paint)",
+		"page-key": "the MD's Page key", "lcd-len-inner": "the MD's inner length (the MM has one length, 1-46)", "chop-start": "Sampler", "chop-reverse": "Sampler", "chop-retrig": "Sampler",
+		"step-wheel-lock": "the MD's trig grid (the MM's lock lane: lockstep-wheel)", "step-accent": "MD accent (no accent on MM synth tracks)", "step-slide": "MD slide on a step (the MM's is a row)" },
+	mm: { "roll-draw": "the MM's piano roll (I-007)", "roll-box": "the piano roll", "roll-length": "the piano roll (I-010)", "roll-chord": "the piano roll", "roll-paint": "the piano roll",
+		"roll-erase": "the piano roll", "piano-black": "the MM's black keys (the MD's come with D6)", "lockstep-wheel": "the MM's lock lane steps", "learn-knob": "the MM's LEARN",
+		"tip-draw": "the piano roll's Draw", "tip-reclock": "the MM's live-recorded value locks the step that plays" }
+};
+for (const [name, mine, other] of [["md", md, mm], ["mm", mm, md]]) {
+	const otherIds = new Set(other.map(e => e.id)), one = mine.filter(e => !otherIds.has(e.id)).map(e => e.id);
+	const unlisted = one.filter(id => !ONLY[name][id]), gone = Object.keys(ONLY[name]).filter(id => !one.includes(id));
+	check(!unlisted.length && !gone.length, `${name.toUpperCase()}: every id only it has is listed with its reason` + (unlisted.length ? ": not listed " + unlisted.join(", ") : "") + (gone.length ? "; listed but shared or gone " + gone.join(", ") : ""));
+}
 const sig = e => (e.mod || "") + " " + (e.code ? [e.code] : e.keys).join(",");
 const mmById = new Map(mm.map(e => [e.id, e]));
 const both = md.filter(e => mmById.has(e.id));

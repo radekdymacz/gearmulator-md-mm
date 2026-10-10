@@ -1096,6 +1096,7 @@ canvas.ed,.edblank,#lanescroll,.lcdroll,.slotgrid,.lcdbox{box-shadow:0 0 0 2px v
 .mst .nt em{font-style:normal;color:var(--keydim);font-size:9px}
 .mst.lk::before{content:"";position:absolute;right:4px;top:12px;width:5px;height:5px;background:var(--cream)}
 .mst.sl::after{content:"";position:absolute;left:3px;top:12px;width:9px;height:5px;background:linear-gradient(135deg,transparent 45%,var(--cream) 45% 60%,transparent 60%)}
+.tc.lkpend,.lb.lkpend{outline:2px dashed var(--led);outline-offset:-2px}
 .mst.ph{box-shadow:0 0 0 2px var(--cream)!important}
 .mst.dim{opacity:.35}
 .mrowg.off .mst.on{filter:saturate(0) brightness(.7)}
@@ -2765,7 +2766,7 @@ const MM_SEAM={
   "playing","step","tempo","engineState","kitState","learnTarget","learning","ctlSetup","show","startEmpty",
   "setPatternSlot","setKitSlot","setReading","setTempo","setInput","setPlaying","setStep","setSongRow","setEng","dlgOpen",
   "setEngineLabel","setEngineTip","setEngines","setAudioEntry","clearLearnTarget","setMapping","setModulation",
-  "setCtlSetup","disable","setRecord","setLcd","setKeyDown","setPst","closeFirmwareDialog","bootRom",
+  "setCtlSetup","disable","setRecord","setRecLock","setLcd","setKeyDown","setPst","closeFirmwareDialog","bootRom",
   "bootInstalled","syxPreview","syxProgress","render","renderTop","drawLib","toast","ask","redraw","movePH",
   "setPos","flashTracks","goWs","clickStep","autoRange","kitSave","redrawAudio","audioLevel","openAudio"]};
 /* ===== The demo host (DESIGN-UNIFY.md 4.6): this mockup on its own plays its edits as the plug-in does =====
@@ -3383,6 +3384,39 @@ function toggleKeys(on){const pop=$("#keyspop");if(!pop)return;if(on??pop.hidden
 Keys.bind({id:"keys-help",short:"This view",scope:"any",keys:["?"],group:"Help",does:"The keyboard view: what every key and gesture does (this)",modal:"keyspop",run:()=>toggleKeys()});
 Keys.bind({id:"keys-help-close",short:"Close",scope:"any",keys:["Escape"],group:"Help",does:"Close the keyboard view",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
 document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target)){pop.hidden=true;keyView?.reset()}},true);
+/* the page zoom keys (skins/shared/deskZoom.js takes them before the map), described, as the MD Editor's */
+Keys.bind({id:"zoom-out",short:"Zoom −",scope:"any",keys:["-"],mod:"cmd",group:"Anywhere",does:"Page zoom: smaller (also in the editor's menu)"});
+Keys.bind({id:"zoom-in",short:"Zoom +",scope:"any",keys:["="],mod:"cmd",group:"Anywhere",does:"Page zoom: larger (⌘+ too)"});
+Keys.bind({id:"zoom-reset",short:"Zoom 100 %",scope:"any",keys:["0"],mod:"cmd",group:"Anywhere",does:"Page zoom: back to 100 %"});
+/* tips: the view's short list (a tip is an entry without keys); the MD Editor's ids where the tip is the same idea */
+[
+ ["tip-step-menu","Right-click a note in the piano roll or a step: everything a step can do, with its key (Ctrl-click on a Mac)."],
+ ["tip-select","⌘-click or ⌘-drag steps to select them; the LCD's Copy, Clr and Paste then act on the selection."],
+ ["tip-draw","B on Sequence turns the piano roll's Draw on and off (off: drag a box round notes to select them). ⇧B taps the tempo on every workspace."],
+ ["tip-undo","A drag, a paint or a run of rotates is one undo step: ⌘Z takes it back whole."],
+ ["tip-play","A to L play the selected track from any workspace, W E T Y U O P its black keys; Z / X move the octave, C / V the velocity."],
+ ["tip-reset","Double-click a value: back to its default. ⇧ while dragging: fine."],
+ ["tip-reclock","While LIVE RECORDING plays, a value you move is locked on the step that plays when it arrives; the step is marked until the machine's pattern shows it."]
+].forEach(([id,does])=>Keys.bind({id,scope:"any",tip:true,keys:[],group:"Tips",does}));
+/* the pointer's gestures that no key shares, described (K0), as the MD Editor's where the MM has them; each is handled next
+   to its own code; here only so the keyboard view, the ? list and the guide list them */
+[
+ ["value-drag","sound mix perform control","Values",["value"],"","Values","Drag up / down or sideways: change it, a value a pixel"],
+ ["value-fine","sound mix perform control","Values",["value"],"shift","Values","Drag: fine, a quarter as fast"],
+ ["value-wheel","sound mix perform control","Values",["wheel on a value"],"","Values","One step a notch (⇧: 10)"],
+ ["value-reset","sound mix perform control","Values",["double-click a value"],"","Values","Back to its default (64; a list's first entry)"],
+ ["tempo-drag","any","Top bar",["tempo"],"","Transport","Drag up or down: the tempo, half a BPM a pixel (⇧: a tenth)"],
+ ["lcd-value","any","LCD",["LCD value"],"","Anywhere","Click: its next value; ⇧-click the previous one; the wheel steps through them. SWING and PTRN: drag up or down"],
+ ["header-menu","any","Anywhere",["right-click"],"","Anywhere","The editor's menu: zoom and window size, updates, the log folder, Developer"],
+ ["gen-value","seq","GEN bar",["GEN value"],"","Sequence","Click: +1; ⇧-click: −1; drag up or down, or the wheel (⇧: 10)"],
+ ["rkey","any","GEN bar",["R key"],"","Selected track","Click: randomise the selected track, as R (⌥-click: every track)"],
+ ["ms-click","any","Tracks",["M / S key"],"","Selected track","Click: mute / solo that track"],
+ ["song-steppers","song","Song",["row value − / +"],"shift","Song","Click: ten at a time"],
+ ["song-drag","song","Song",["drag a pattern pad or a row"],"","Song","Onto the arrangement: a new row there, or the row moved"],
+ ["lib-slot-click","library","Library",["kit slot"],"","Kit library, pattern chooser","Click: load it (⌥-click: only select it). Double-click: rename"],
+ ["lib-pattern-now","library","Library",["pattern slot"],"shift","Kit library, pattern chooser","Click: go there at once, not at the end of the pattern"],
+ ["lib-slot-drag","library","Library",["drag a slot onto another"],"","Kit library, pattern chooser","Copy it there"]
+].forEach(([id,scope,area,keys,mod,group,does])=>Keys.bind({id,scope,area,keys,mod,group,does}));
 
 /* ===== Note lengths in the piano roll (I-010, 0.5): a note is a trig and where it ends, as the machine plays it =====
    Pure: a track's steps (null, {off:1} or a trig {n, a, f, l}) and the pattern's length in, changes out ([step, value]
@@ -4598,6 +4632,16 @@ function renderRail(){const r=$("#rail"),withSide=S.ws==="seq"||S.ws==="sound";
  r.innerHTML=`<div class="railhead">Track<button class="iconkey allon" id="allon" ${anyMs?"":"disabled"} title="Unmute and unsolo every track (0)">M/S off</button></div>`+side().map(th).join("")+(withSide?`<div style="margin-top:4px">${sideSw()}</div>`:"")+(S.ws==="seq"?lockPicker(S.sel):"");altLabels()}
 function rowStatus(t){const tr=trk(t),arp=tr.arp.MODE>0,trn=tr.tr.TRACK-64;return[arp?"ARP":"",t<6&&tr.tr.SCALE?["","FIX","MAJ","MIN"][tr.tr.SCALE]:(trn?(trn>0?"+":"")+trn:"")].filter(Boolean).join(" ")}
 const ROLL_TIP=t=>`${tLabel(t)} notes. ${S.rollDraw?`Draw (B): click adds a note of ${MmRoll.say(S.rollLen)}, drag sideways paints · up or down: pitch · shift-click adds a chord note`:`Select (B: draw): drag a box round notes · click a note selects it · drag the selection moves it (⌘-drag: a copy) · double-click adds a note · shift-click a note extends the selection`} · drag a note's end: its length (new notes get it too; a ${isMidiT(t)?"MIDI note's LEN, 6 a step":"NOTE OFF where it ends"}) · alt-click deletes a note (the one before keeps its length), or sets a NOTE OFF on an empty step · ⌘-click or ⌘-drag selects steps · right-click: the step menu · scroll = pitch${isMidiT(t)?"":" · the keys on the left play the note"}${(()=>{const a=trk(t).arp;return a.MODE&&a.SPD?` · light notes: what the arpeggiator plays${a.PLAY===4?" (random order: outlined, the pitches vary)":""}`:""})()}`;
+/* ===== Values while live recording (as the MD Editor's): the firmware locks the step that plays when a value arrives (CC; a
+   step without a trig gets a trigless lock); the plug-in names it (machine.desk.recLock: track, page.value, step) and
+   the trig row's cell and the lock lane's bar show it until the read-back brings the real lock. ===== */
+let recLockKey="";
+function markRecLock(){$$(".lkpend").forEach(c=>c.classList.remove("lkpend"));const l=S.recLock;if(!l||S.ws!=="seq"||l.t!==S.sel)return;
+ const c=document.querySelector(`#tlanes .tlane.env [data-s="${l.s}"]`);if(c)c.classList.add("lkpend");
+ if(S.lane===l.pid){const b=document.querySelector(`#lane .lb[data-s="${l.s}"]`);if(b)b.classList.add("lkpend")}}
+function setRecLock(l){S.recLock=l||null;const key=l?l.t+":"+l.pid+":"+l.s:"";
+ if(key&&key!==recLockKey)toast(`Locks ${tLabel(l.t)} ${pidLabel(l.t,l.pid)} on step ${l.s+1}: the step that plays when the value arrives.`);
+ recLockKey=key;setTimeout(markRecLock,20)}
 function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);dockOf(t);
  const rows=[["env",midi?"VEL":"Env"],["sld","Slide"],["swg","Swing"]];
  let h=`<div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}"><div class="rul"></div>${steps().map(s=>`<div class="rul ${gapC(s)} ${rulSel(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}</div>
@@ -4610,7 +4654,7 @@ function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);dockOf(t);
  <div class="lanewrap"><div class="lanetop">${S.dock==="locks"?`<span class="cap">Lock lane · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m} · <b id="lanename">${pidLabel(t,S.lane)}</b> <span class="lanescale" id="lanescale"></span></span>
   <span class="lockbudget" id="lockbudget"></span><span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Shift-drag draws a ramp, a straight line from where you press to where you let go. The wheel over a step with a trig moves its lock (Shift: fine). Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value. A slide step glides to the next lock.">Draw to lock · ⇧ ramp · alt erases</span>`:(()=>{const[h,hl]=dockHelp(t,S.dock);return`<span class="cap">${DOCKN[S.dock]} · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m}</span><span class="lockbudget dkread" id="dkread">${dockRead(t,S.dock)}</span><span class="lanehelp dkhelp" title="${dkAttr(hl)}">${h}</span>`})()}${dockTabs(t)}</div>
   ${S.dock==="locks"?dockBody(t):`<div class="dockbody" id="dock">${dockBody(t)}</div>`}</div>`;
- $("#main").innerHTML=h;document.body.classList.toggle("dockother",S.dock!=="locks");fitLane();renderLane();syncScroll();syncControls();alignLock();syncLockBudget()}
+ $("#main").innerHTML=h;document.body.classList.toggle("dockother",S.dock!=="locks");fitLane();renderLane();syncScroll();syncControls();alignLock();syncLockBudget();markRecLock()}
 /* as in the MD Editor: the rail's LOCK PARAMETER block starts on the line above the lock lane (the lane's top border, under the GEN bar) and ends at its bottom edge */
 function alignLock(){const rp=$("#rail .railparams"),lt=$(".lanetop"),ls=$("#lanescroll")||$("#main>.lanewrap>.dockbody");if(!rp||!lt||!ls||S.ws!=="seq")return;
  const roll=$("#seq canvas.roll[data-big]"),tb=rp.querySelector(".pagetabs");
@@ -4754,7 +4798,7 @@ function setRollDraw(on){S.rollDraw=!!on;S.rollBox=null;rollPrefs();syncRollKeys
 function setRollLen(L,say){L=clamp(Math.round(L),1,64);if(L!==S.rollLen){S.rollLen=L;rollPrefs();syncRollKeys()}if(say)toast(`New notes: ${MmRoll.say(L)}.`)}
 /* the Len key: the next (shift: the one before) of 1/16 1/8 1/4 1/2 1 bar, from where it is */
 function stepRollLen(back){const Ls=MmRoll.LENGTHS,n=back?[...Ls].reverse().find(x=>x<S.rollLen)??Ls[Ls.length-1]:Ls.find(x=>x>S.rollLen)??Ls[0];setRollLen(n,true)}
-Keys.bind({id:"roll-draw",short:"Draw",scope:"seq",keys:["B"],group:"Sequence",does:"Piano roll: draw notes on / off (off: drag a box round notes to select them, drag them to move, double-click adds one). B taps the tempo on the other workspaces",when:()=>seqKeys()&&kbOn(),run:()=>setRollDraw(!S.rollDraw)});
+Keys.bind({id:"roll-draw",short:"Draw",scope:"seq",keys:["B"],group:"Sequence",does:"Piano roll: draw notes on / off (off: drag a box round notes to select them, drag them to move, double-click adds one). ⇧B taps the tempo here, B on the other workspaces",when:()=>seqKeys()&&kbOn(),run:()=>setRollDraw(!S.rollDraw)});
 Keys.bind({id:"roll-box",scope:"seq",area:"Roll",keys:["drag in an empty place"],group:"Sequence",does:"Select (Draw off): box notes; the selection takes them from the first trig to the last one's end. Drag the selection: move it"});
 Keys.bind({id:"roll-length",scope:"seq",area:"Roll",keys:["drag a note's end"],group:"Sequence",does:"The note's length (a NOTE OFF where it ends; a MIDI note's LEN, 6 a step); new notes get it too. Up to the track's next trig, past the pattern's end onto its start"});
 const midiOf=t=>isMidiT(t)?{kitLen:trk(t).v.MID[0]}:null;
@@ -4949,8 +4993,8 @@ function liveRecord(){if(HOST.record)return HOST.record(true);S.rec=!S.rec;if(S.
 
 /* ---- the keyboard: two rows play the selected synth track chromatically, from any workspace, as a DAW's typing
    keyboard: A S D F G H J K L are the white keys C D E F G A B C D from C-3, W E · T Y U · O P the black keys above
-   them (C♯ D♯ · F♯ G♯ A♯ · C♯ D♯; R and I sit where a piano has no black key) (Z / X: the octave, −3 to +3; B taps
-   the tempo, since T is F♯ here; MM-PORT-PLAN.md 2026-10-05), real MIDI notes on the track's own channel
+   them (C♯ D♯ · F♯ G♯ A♯ · C♯ D♯; R and I sit where a piano has no black key) (Z / X: the octave, −3 to +3; ⇧B taps
+   the tempo everywhere, B off Sequence, since T is F♯ here; MM-PORT-PLAN.md 2026-10-05), real MIDI notes on the track's own channel
    (GLOBAL › MIDI › CHANNELS: base + track), at KB.vel (C / V: 20 40 60 80 100 127; the machine hears it through
    ASSIGN › VEL). Each key is its own note on and off, so legato and the machine's note priority work as on a
    keyboard; while LIVE RECORDING the machine records them. MIDI tracks are not played (their notes go to the
@@ -4986,7 +5030,9 @@ Keys.bind({id:"mute-track",scope:"any",keys:["M"],code:"KeyM",group:"Selected tr
 Keys.bind({id:"mute-all",scope:"any",keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
 Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
  when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{if(selKeys()){selMove(e.key==="ArrowDown"?1:-1,0);return}const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
-Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here). On Sequence B is the piano roll's Draw",when:()=>kbOn()&&S.ws!=="seq",run:()=>tapTempo()});
+Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here). On Sequence B is the piano roll's Draw: tap with ⇧B",when:()=>kbOn()&&S.ws!=="seq",run:()=>tapTempo()});
+/* ⇧B taps on every workspace, Sequence included: the one tap chord of both editors (Radek, 2026-10-10) */
+Keys.bind({id:"tap-tempo-shift",short:"Tap",scope:"any",keys:["B"],mod:"shift",group:"Transport",does:"Tap tempo: ⇧B taps on every workspace of both editors",when:kbOn,run:()=>tapTempo()});
 Keys.bind({id:"rotate",scope:"seq",keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
 Keys.bind({id:"unmute-all",scope:"any",keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
 Keys.bind({id:"unmark-paste",scope:"seq",keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});
@@ -6961,6 +7007,7 @@ Keys.bind({id:"ms-paint",scope:"any",area:"Tracks",keys:["drag M / S keys"],grou
 Keys.bind({id:"roll-chord",scope:"seq",area:"Roll",keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});
 Keys.bind({id:"roll-paint",scope:"seq",area:"Roll",keys:["roll"],group:"Sequence",does:"Draw on (B): click an empty step: a note there, as long as the Len key says; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (the last one as long as the Len key says; one undo step). Draw off: double-click"});
 Keys.bind({id:"roll-erase",scope:"seq",area:"Roll",keys:["roll"],mod:"alt",group:"Sequence",does:"Click: delete a note, the note before it keeps its length (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step"});
+Keys.bind({id:"lane-draw",scope:"seq",area:"Lock lane",keys:["lock lane"],group:"Sequence",does:"Drag over the bars: lock the lane's parameter on each step with a trig"});
 Keys.bind({id:"lane-erase",scope:"seq",area:"Lock lane",keys:["lock lane"],mod:"alt",group:"Sequence",does:"Drag: erase locks"});
 Keys.bind({id:"lane-clear-all",scope:"seq",area:"Lock lane",keys:["lock lane clear"],mod:"alt",group:"Sequence",does:"Click: clear every lock of the track (all its parameters)"});
 
@@ -7217,7 +7264,7 @@ window.MMView={
  show,startEmpty,setPatternSlot,setKitSlot,setReading,setTempo:bpm=>{S.bpm=bpm},
  setInput,setPlaying,setStep,setSongRow:r=>{S.songRow=r;markSongRow()},
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,
- setRecord,
+ setRecord,setRecLock,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
