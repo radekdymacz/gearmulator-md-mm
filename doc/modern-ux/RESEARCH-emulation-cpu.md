@@ -420,6 +420,32 @@ Ship PGO for the arm64 slice (L6). Then decide on the codegen pass (L13b). Consi
 
 End point if all gates pass: about 57 % / 64 % (MD) and 60 % / 68 % (MM) of today's shipped cost (§1).
 
+## Around the core: the audio thread outside the emulation (2026-10-10, branch perf/audio-thread-spikes)
+
+A read-only review listed six suspected costs on the plug-in's audio thread outside the emulated chips, with estimates
+only. Each was measured on main (8919a8e1c) before anything changed: the processor path with a scratch probe (the real
+`AudioPluginAudioProcessor`, `RealtimeInstrumentation`'s lock-wait and resampler counters, `thread_selfcounts`
+instructions, an `operator new` counter), the emulation with `mdmmPerfGateTest` in paired runs. M4 Pro, loaded
+(load average 4-23), so times are maxima over many runs or paired medians and instructions are the steady measure.
+
+| # | Claimed | Measured | Done | Bit-exact |
+|---|---|---|---|---|
+| 1 | A save copies ~9 MB under the lock the audio thread needs, 1-3 ms | Capture under the lock (`beginStateCapture`, 60 saves each): MD 0.14 ms median, 0.15 p90, MM 0.05 ms, the same with user data; the first save of a session 0.6 ms once (fresh pages). Audio thread's longest lock wait while saving every 15 ms: 0.27-0.49 ms MD, 0.24 ms MM | Not fixed: below the 0.5 ms bar | - |
+| 2 | The editor's sample list is read on the audio thread for 52 blocks, allocating | Real: a slot a block, 143 allocations (3.2 MB) on the audio thread, a slot up to 128 us (3.1 M instructions), median 16 us, ~0.85 ms in all (factory samples; a long RAM-R recording more, a word at a time) | Fixed: the audio thread copies the raw memory (25 blocks, median 4 us, at most 13 us, no allocation); the reader builds the list (~1 ms, message thread); `a81e1e4be`, `mdSampleScanFirmwareTest` | the list is equal (`MdSampleBank ==`) |
+| 3 | Opening a project runs a second machine on the audio thread | Only when the factory cache does not exist yet (first run, or deleted) and the project holds user samples: 5,279 blocks (15 s) with both machines, the candidate 1.34 ms a 128-frame block on top of the live 1 ms, at most 6.9 ms in one block. With the cache (every later run): no second machine, the swap is O(1), the audio thread's lock wait at most 0.37 ms; the fresh machine's first blocks cost up to 3.4x (its JIT warming up, as at start-up) | Not fixed: once per installation; moving the candidate to a worker means a second owner of a Hardware the device lock guards (its switches, the save capture, cancel) | - |
+| 4 | At 48 kHz: 8 copies of large tables, all 6 outputs and silent inputs resampled | Real: libresample built its 544 KiB filter per channel (8 per instance, 4.8 MB). Resampler's own time 32-34 us a 128-frame block (device ~1.3 ms). Skipping the 4 unused outputs would save ~7 us more (0.5 %), the silent inputs ~0.4 us | Fixed: one filter per process: 19-20 us a block (-40 %), 0.34 MB; `e20c08b23`, `synthLibResamplerFilterTest`. Skipping buses not done: a bus enabled later could not be bit-exact, for 0.5 % | outputs bit-identical, latency unchanged |
+| 5 | The DSP-to-DSP link uses thread-safe queues on one thread | Lock-free rings (`Audio` rings `Lock=false`), 9 pairs: instructions MD -0.5 %, MM -0.7 %; host cycles MD -0.3 / +1.5 %, MM -1.2 % (paired medians, within the noise of +-5 %) | Not fixed: not shown to be 0.5 % of host time; the core's `Audio` rings serve every DSP user | goldens PASS |
+| 6 | Every patch-memory access takes a lock | The lock is taken 0.68-0.76 times a frame (MD), 1.25-1.32 (MM); the ColdFire's other slow accesses 15 (MD), 40-43 (MM). Without the lock: instructions -0.1 to -0.3 % (noise) | Not fixed: not measurable | - |
+
+Checks on the branch: goldens 30/30 (24 + the 6 exact-ESSI keys, both speed-ups positions), `scripts/mdmm-dev.sh
+tests` 122/122, the processor firmware tests (`mdProjectStateRestoreTest`, `mdSessionFirmwareTest`,
+`mdFirstStartFirmwareTest`), pluginval 5 and 8 on the Machinedrum VST3.
+
+Also seen: a probe that corrupted flash at sector 6 of a project and loaded it hung the audio thread for good, holding
+the device lock: the ColdFire pushed into DSP1's full host-port ring (`RingBuffer<..., true>`), which blocks, on the
+thread that would drain it. Not reproduced with a real project; a non-blocking push there (drop and count) would turn
+such a hang into a wrong note.
+
 ## 6. Sources
 
 Internal (repo, read only):
