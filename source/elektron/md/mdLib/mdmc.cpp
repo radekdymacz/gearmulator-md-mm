@@ -722,7 +722,7 @@ namespace md
 		const auto r = resolve(_addr);
 		if(r.peripheral)						{ logPeripheral(_addr, 0, 2, false); return 0; }
 		if(!r.data || (r.offset + 1) >= r.size)	return 0;
-		return mc68k::memoryOps::readU16(r.data, r.offset);
+		return loadBe16(r.data + r.offset);
 	}
 
 	void Microcontroller::write8Slow(const uint32_t _addr, const uint8_t _val)
@@ -812,7 +812,7 @@ namespace md
 		const auto r = resolve(_addr);
 		if(r.peripheral)										{ logPeripheral(_addr, _val, 2, true); return; }
 		if(!r.writable || !r.data || (r.offset + 1) >= r.size)	return;
-		mc68k::memoryOps::writeU16(r.data, r.offset, _val);
+		storeBe16(r.data + r.offset, _val);
 	}
 
 	uint16_t Microcontroller::readImm16(const uint32_t _addr)
@@ -821,7 +821,7 @@ namespace md
 		const uint32_t pageAddress = _addr & ~g_immPageMask;
 		const uint32_t pageOffset = _addr & g_immPageMask;
 		if(pageOffset + 1 < g_immPageSize && pageAddress == m_immPageAddress)
-			return mc68k::memoryOps::readU16(m_immPageData, pageOffset);
+			return loadBe16(m_immPageData + pageOffset);
 
 		const auto r = resolve(_addr);
 		if(r.peripheral || !r.data || (r.offset + 1) >= r.size)	return 0;
@@ -834,9 +834,9 @@ namespace md
 		{
 			m_immPageAddress = pageAddress;
 			m_immPageData = r.data + r.offset - pageOffset;
-			return mc68k::memoryOps::readU16(m_immPageData, pageOffset);
+			return loadBe16(m_immPageData + pageOffset);
 		}
-		return mc68k::memoryOps::readU16(r.data, r.offset);
+		return loadBe16(r.data + r.offset);
 	}
 
 	uint32_t Microcontroller::readImm32(const uint32_t _addr)
