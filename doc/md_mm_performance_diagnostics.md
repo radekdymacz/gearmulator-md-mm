@@ -32,14 +32,16 @@ this on later launches. The context menu can stop an environment-started capture
 
 ## Switches for testers
 
-The editors run the emulated Machinedrum and Monomachine faster than they used to (the emulation CPU work: the
-speed-ups listed below). One switch turns all of them off, so you can find out in minutes whether a CPU problem, a
-click or a timing difference comes from them. With the speed-ups off the emulation runs the code that the
-speed-ups replaced, and costs about what it did before them: a few per cent less, because the one thing that stays
-on is the `processUC` gating (part B of L5; it only skips work that cannot change anything, so it has no switch).
+The editors run the emulated Machinedrum and Monomachine faster than they used to (the emulation CPU work, steps 1
+and 2: the speed-ups listed below, and one emulator fix that came with them). One switch turns all of them off, so
+you can find out in minutes whether a CPU problem, a click or a timing difference comes from them. With the
+speed-ups off the emulation is the one from before them, exactly: it runs the code that the speed-ups replaced, and
+costs about what it did then: a few per cent less, because the one thing that stays on is the `processUC` gating
+(part B of L5; it only skips work that cannot change anything, so it has no switch).
 
-- **Step 1 (L1, L11, L2b, L5) and step 2's L4 produce the same audio in both positions, bit for bit**, checked on both firmwares
-  (audio, RAM, SRAM, loader RAM, patch RAM and MIDI out are compared); only the host CPU differs.
+- **Step 1 (L1, L11, L2b, L5), L4 and the CMPM fix produce the same audio in both positions, bit for bit**,
+  checked on both firmwares (audio, RAM, SRAM, loader RAM, patch RAM and MIDI out are compared); only the host CPU
+  differs.
 - **Step 2's L3 changes the Machinedrum's audio between the positions, by design**: with the speed-ups on its
   serial ports wake the DSPs at the exact cycle of each slot, as the Monomachine always has; off, as before. The
   Monomachine is not affected. So on the Machinedrum, on and off are two slightly different machines (the same
@@ -54,7 +56,7 @@ on is the `processUC` gating (part B of L5; it only skips work that cannot chang
   starting position: a ticked menu item also starts a session with the speed-ups off, and the menu can
   change either at run time.
 
-The speed-ups the switch controls:
+Everything the switch turns off:
 
 - **L1** the idle skip of the ColdFire's wait loop tests its inputs once per batch instead of at every
   skipped instruction.
@@ -70,6 +72,10 @@ The speed-ups the switch controls:
   dispatcher, up to the next moment anything is due: the silent-voice NOP loops and the loops that wait on a DMA
   register (both machines; not the loops that wait on Port C). Bit-exact: the same audio as without it, in both
   positions.
+- **CMPM fix** (step 2, both machines) the DSP compiler's `cmpm` with the other accumulator as its source no longer
+  leaves that accumulator's magnitude behind in it (an emulator bug). Neither firmware runs that form of the
+  instruction, so this changes nothing they do; off keeps the old behaviour so that off is the old emulation
+  exactly.
 
 Two finer environment variables exist for narrowing a problem down further. Both are environment
 variables only:
