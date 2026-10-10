@@ -92,7 +92,7 @@ jobs:
         # Exercise the JUCE-without-shipping-formats configuration before merge.
         # main gets the one light build (unit tests, no memory checker), in the background: nobody waits for it.
         # Release branches, pull requests and hand runs get all three (doc/release/CI.md).
-        mode: ${{ fromJSON(github.ref == 'refs/heads/main' && '["release"]' || '["release", "transport-diagnostics", "asan-ubsan"]') }}
+        mode: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/main' && '["release"]' || '["release", "transport-diagnostics", "asan-ubsan"]') }}
 
     steps:
       - uses: actions/checkout@v4

@@ -21,6 +21,7 @@ its own (one target, seconds).
 | Push to `main` | One light job in the background: automation core, Linux, unit tests, no memory checker. Nobody waits for it. |
 | Push to `release/0.*` | The full suite once: Editors on macOS, Windows (LTCG, what ships) and Linux, core with ASan/UBSan and the transport diagnostics, audio I/O, shared controller. A newer push cancels the older run. |
 | Tag `mdmm-v*` on the tested release-branch commit | Finds that branch run and reuses its packages: makes the installers, tests them, attaches them. No second build. |
+| Nightly, 02:00 UTC (04:00 Polish summer time) | The full suite on main, only if main changed in the last 24 hours (`mdmm-nightly.yml`). Nobody waits; a red run is there in the morning. |
 | By hand | Every workflow has Run workflow; the release installers have a dry run. |
 
 Off: upstream's Elektron workflows (disabled in Actions), the per-push installer dry run.
