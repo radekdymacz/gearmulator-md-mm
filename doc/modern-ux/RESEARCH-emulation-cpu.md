@@ -199,8 +199,10 @@ Gains are % of today's emulation-thread CPU, after overlap with the levers befor
   | MM playing | ×0.948 (0.926-0.955) | ×0.929 | ×0.944 |
 
   About 7.5 % less on the Machinedrum and 5-6 % on the Monomachine, on top of steps 1 and 2: inside the ×0.91-0.94
-  expected above and over the 5 % gate of §5. The libc++ rename means CI's build should get most of it, but it was
-  measured only on the local toolchain.
+  expected above and over the 5 % gate of §5. Measured on the local toolchain only; CI's build (macos-15, Xcode 16.4,
+  run 38061313333, all jobs green) converted the same profile, renamed libc++ ne200100 to ne190102 and reported 15
+  of the profiled functions mismatched over both slices, the same count as the local universal build, so it applies
+  the same counts.
 - **Not done.** Windows: MSVC's `.pgd` belongs to the exact instrumented build and toolset, so a profile trained
   elsewhere cannot be reused in CI; the way there is clang-cl with this same text profile (a compiler change for the
   Windows build, its own project). Linux: GCC cannot read LLVM profiles (same answer, clang). Not measured: the plug-in
