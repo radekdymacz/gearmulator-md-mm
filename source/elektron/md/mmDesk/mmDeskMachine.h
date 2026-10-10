@@ -113,6 +113,10 @@ namespace mmDesk
 		double now() const { return m_port.nowMs(); }
 		// the session's clock where an engine may have none (a test's port)
 		double clock() const { return m_port.nowMs ? m_port.nowMs() : 0; }
+		// The global slot that is (or is about to be) active: the editor's choice (globalSlot) until the machine's
+		// status shows it, else the machine's. A dump of this slot is what is made active again after RECV.
+		int activeSlot() const { return m_chosenGlobal >= 0 ? m_chosenGlobal : m_curGlobal; }
+		void sendActiveGlobal(int _slot);
 		// memory's mute of track t (0-5 synth, 6-11 MIDI), POLY and tempo (BPM x 24); nullopt: not known
 		std::optional<bool> muteInMemory(const int _t) const { if(m_tel.mutes < 0) return std::nullopt; return ((m_tel.mutes >> _t) & 1) != 0; }
 		std::optional<bool> polyInMemory() const { if(m_poly < 0) return std::nullopt; return m_poly == 1; }
@@ -251,6 +255,12 @@ namespace mmDesk
 		deskCore::WireFacts m_wire;
 		int m_curPattern = -1, m_curKit = -1, m_curSong = -1, m_curGlobal = -1, m_songMode = -1;
 		int m_activateGlobal = -1;	// the active global's slot to make active again (0x56) once RECV is left
+		// The slot the editor made active (globalSlot) until the status shows it: a dump of the old active global read
+		// back meanwhile must not make that one active again over the choice (the 0.5.0 gate's mm-global-slot).
+		// Given up once the 0x56 for it went g_chosenGlobalMs ago and the status still says another.
+		int m_chosenGlobal = -1;
+		double m_chosenSentMs = -1;	// when the 0x56 for it went (-1: still waits for RECV to be left)
+		static constexpr double g_chosenGlobalMs = 3000;
 		int m_baseChannel = -1;		// the active global's base channel as last read (-1: not yet)
 		double m_channelsSettleUntilMs = -1e9;	// B-051: after a base channel change, no channel messages until then
 		static constexpr double g_channelsSettleMs = 6000;
