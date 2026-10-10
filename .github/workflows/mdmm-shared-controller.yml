@@ -46,8 +46,8 @@ on:
       - "source/xtLib/**"
   push:
     branches:
-      - main
       - "release/md-mm-*"
+      - "release/0.*"
     paths:
       - ".github/workflows/mdmm-shared-controller.yml"
       - ".gitmodules"

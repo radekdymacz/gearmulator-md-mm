@@ -27,16 +27,7 @@ on:
   push:
     tags:
       - "mdmm-v*"
-  # A dry run of every push to a release branch whose mdmm-editors.yml run (all three systems) passed: the installers
-  # of that commit are made, installed and tested without being attached to anything. GitHub runs a workflow_run
-  # workflow from the default branch's copy of this file, with github.sha and github.ref of the default branch:
-  # the commit under test is workflow_run.head_sha (SHA / checkout `ref` below), and no job that publishes can
-  # run (they need a refs/tags/mdmm-v* ref and a push or dispatch event).
-  workflow_run:
-    workflows: ["MD/MM Editors"]
-    types: [completed]
-    branches:
-      - "release/**"
+  # No dry run on every release-branch push any more (doc/release/CI.md): run this by hand with dry_run to rehearse.
   workflow_dispatch:
     inputs:
       dry_run:

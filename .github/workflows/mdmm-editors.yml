@@ -27,7 +27,6 @@ on:
         default: false
   push:
     branches:
-      - main
       - "release/md-mm-*"
       - "release/0.*"
       - "feat/windows-*"
@@ -87,7 +86,8 @@ jobs:
   windows:
     uses: ./.github/workflows/mdmm-editors-windows.yml
     with:
-      ltcg: ${{ inputs.ltcg || false }}
+      # A release branch builds what ships (LTCG), so the tag on that commit reuses this run instead of building again.
+      ltcg: ${{ inputs.ltcg || startsWith(github.ref, 'refs/heads/release/') }}
 
   linux:
     uses: ./.github/workflows/mdmm-editors-linux.yml

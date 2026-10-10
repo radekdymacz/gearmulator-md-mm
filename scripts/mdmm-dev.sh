@@ -9,6 +9,8 @@
 #   scripts/mdmm-dev.sh build [target...]    build the four editor targets (default) or the ones named;
 #                                            configures first when needed
 #   scripts/mdmm-dev.sh tests                build and run the unit tests (ctest -E "Plugin|_AU|VST|FirmwareTest")
+#   scripts/mdmm-dev.sh play md|mm           build that machine's standalone only and open it (the dev loop: build,
+#                                            play, accept; no tests, doc/release/CI.md)
 #   scripts/mdmm-dev.sh stats                ccache's statistics
 #
 # ccache: `brew install ccache` (macOS) or `sudo apt-get install ccache` (Linux), once. With it a fresh worktree or a
@@ -79,6 +81,24 @@ case "$cmd" in
 		mkdir -p "$BUILD/build-data"
 		GEARMULATOR_DATA_ROOT="$BUILD/build-data/" cmake --build "$BUILD" --parallel "$JOBS"
 		GEARMULATOR_DATA_ROOT="$BUILD/build-data/" ctest --test-dir "$BUILD" -j "$JOBS" --output-on-failure -E "Plugin|_AU|VST|FirmwareTest" ;;
+	play)
+		case "${1:-}" in
+			md) target=mdJucePlugin_Standalone; app="Machinedrum Editor" ;;
+			mm) target=mmJucePlugin_Standalone; app="Monomachine Editor" ;;
+			*) echo "usage: $0 play md|mm" >&2; exit 2 ;;
+		esac
+		build "$target"
+		if [ "$(uname -s)" = Darwin ]; then
+			bundle=$(find "$BUILD" -name "$app.app" -type d -path '*Standalone*' -prune 2>/dev/null | head -n 1)
+			[ -n "$bundle" ] || { echo "no $app.app under $BUILD" >&2; exit 1; }
+			echo "opening $bundle"
+			open -n "$bundle"
+		else
+			exe=$(find "$BUILD" -type f -perm -u+x -name "$app" -path '*Standalone*' 2>/dev/null | head -n 1)
+			[ -n "$exe" ] || { echo "no $app under $BUILD" >&2; exit 1; }
+			echo "starting $exe"
+			"$exe" &
+		fi ;;
 	stats) ccache --show-stats ;;
-	*) echo "usage: $0 configure | build [target...] | tests | stats" >&2; exit 2 ;;
+	*) echo "usage: $0 configure | build [target...] | tests | play md|mm | stats" >&2; exit 2 ;;
 esac
