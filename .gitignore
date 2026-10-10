@@ -30,3 +30,4 @@ marketing/reels/out/
 marketing/reels/node_modules/
 marketing/**/*.syx
 .remotion/
+__pycache__/
