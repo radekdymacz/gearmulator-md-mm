@@ -14,7 +14,9 @@ require_firmware_tests="${GEARMULATOR_REQUIRE_FIRMWARE_TESTS:-1}"
 md_firmware_bin="${GEARMULATOR_MD_FIRMWARE_BIN:-}"
 mm_firmware_bin="${GEARMULATOR_MM_FIRMWARE_BIN:-}"
 release_architectures_input="${GEARMULATOR_MDMM_MACOS_ARCHITECTURES:-arm64;x86_64}"
-release_pgo_mode="${GEARMULATOR_MDMM_APPLE_PGO_MODE:-none}"
+# committed (default): the profile kept in source/elektron/md/pgo, for both slices (L6); none: ThinLTO only;
+# use: the strict single-architecture path with a private profile and provenance (doc/mdmm-apple-optimization.md).
+release_pgo_mode="${GEARMULATOR_MDMM_APPLE_PGO_MODE:-committed}"
 release_pgo_profile="${GEARMULATOR_MDMM_APPLE_PGO_PROFILE:-}"
 release_pgo_provenance="${GEARMULATOR_MDMM_APPLE_PGO_PROVENANCE:-}"
 readonly md_firmware_bin_sha256="68542e30917b9918ccaee2b2237df62c8a00479938680b85aca93ce4fbca44c8"
@@ -168,6 +170,26 @@ cmake -S "${source_dir}" -B "${build_dir}" \
   -Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON \
   -Dgearmulator_BUILD_JUCEPLUGIN_AU=ON \
   -Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON
+
+# The committed profile's state, said where CI shows it: a stale profile still builds (changed functions get no
+# profile data), a missing one builds without PGO.
+pgo_cache_value() { sed -n "s/^$1:INTERNAL=//p" "${build_dir}/CMakeCache.txt" | head -n 1; }
+pgo_note=""
+if [[ "${release_pgo_mode}" == "committed" ]]; then
+  if [[ -n "$(pgo_cache_value GEARMULATOR_MDMM_APPLE_PGO_FALLBACK)" ]]; then
+    pgo_note="Built WITHOUT the committed PGO profile: $(pgo_cache_value GEARMULATOR_MDMM_APPLE_PGO_FALLBACK)"
+  elif [[ -n "$(pgo_cache_value GEARMULATOR_MDMM_APPLE_PGO_STALE)" ]]; then
+    pgo_note="The committed PGO profile is stale for: $(pgo_cache_value GEARMULATOR_MDMM_APPLE_PGO_STALE). Retrain before a release: scripts/macos/train_mdmm_pgo.sh"
+  else
+    echo "Committed PGO profile applied and current ($(pgo_cache_value GEARMULATOR_MDMM_APPLE_PGO_COMMITTED_SHA256))"
+  fi
+fi
+if [[ -n "${pgo_note}" ]]; then
+  echo "WARNING: ${pgo_note}" >&2
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "::warning title=PGO::${pgo_note}"
+  fi
+fi
 
 # Read back the generated cache. This prevents a renamed option, stale cache,
 # or later CMake change from silently producing an ordinary Release package.

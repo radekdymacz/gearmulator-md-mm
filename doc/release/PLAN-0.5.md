@@ -82,7 +82,7 @@ On top of the clean-up, each lever alone, behind the speed-ups switch, gated by 
 | 3 | L3: exact MD ESSI deadlines | ~10 % MD | changes MD audio once: Radek's listening sign-off |
 | 4 | L4: DSP idle-loop fast-forward (after L3; the NOP stubs first) | ~10-15 % | bit-exact against the L3 goldens |
 | 5 | L7, L9, L10: scheduler glue | ~5 % | bit-exact |
-| 6 | PGO in the release build | ~8 % | the release gate |
+| 6 | PGO in the release build: committed profile, both macOS slices, done on perf/pgo (RESEARCH "L6 measured") | MD −7.5 %, MM −5.5 % (measured) | goldens 24 + 6 equal; retrain when stale (CI.md "PGO") |
 | 7 | Try: render ahead (helica1), opt-in, with real-time priority and the audio workgroup | DAW thread lighter | delayed output equal |
 
 ## User fixes beside it

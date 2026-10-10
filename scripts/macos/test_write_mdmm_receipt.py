@@ -104,7 +104,8 @@ class ReceiptPathSafetyTest(unittest.TestCase):
         cases = (
             ("arm64;x86_64", "use", profile, provenance, "exactly one"),
             ("arm64", "use", profile, None, "both profile and provenance"),
-            ("arm64", "generate", None, None, "none or use"),
+            ("arm64", "generate", None, None, "none, use or committed"),
+            ("arm64;x86_64", "committed", profile, None, "while PGO mode is committed"),
             ("arm64", "none", profile, None, "while PGO mode is none"),
             ("native", "none", None, None, "must be arm64"),
         )
@@ -171,11 +172,73 @@ class ReceiptPathSafetyTest(unittest.TestCase):
                 },
             )
 
+    def test_release_selection_accepts_universal_committed_pgo(self) -> None:
+        result = receipt.release_selection("arm64;x86_64", "committed", None, None)
+
+        self.assertEqual(result["pgo_mode"], "committed")
+        # The package keeps its name: the CI and release jobs look for the universal zip.
+        self.assertEqual(
+            result["package_name"], "Gearmulator-Elektron-macOS-Universal"
+        )
+
+    def committed_cache(self, extra: str, applied: str = "committed") -> pathlib.Path:
+        cache = self.write_cache()
+        text = cache.read_text(encoding="utf-8")
+        text = text.replace(
+            "GEARMULATOR_MDMM_APPLE_PGO_MODE:STRING=none",
+            "GEARMULATOR_MDMM_APPLE_PGO_MODE:STRING=committed",
+        ).replace(
+            "GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PGO_MODE:INTERNAL=none",
+            f"GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PGO_MODE:INTERNAL={applied}",
+        )
+        cache.write_text(text + extra, encoding="utf-8")
+        return cache
+
+    def test_committed_pgo_is_recorded_for_every_slice(self) -> None:
+        text_sha = "a" * 64
+        cache = self.committed_cache(
+            f"GEARMULATOR_MDMM_APPLE_PGO_COMMITTED_SHA256:INTERNAL={text_sha}\n"
+            "GEARMULATOR_MDMM_APPLE_PGO_STALE:INTERNAL=source/mc68k\n"
+        )
+        cache.write_text(
+            cache.read_text(encoding="utf-8").replace(
+                "GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PROFILE_SHA256:INTERNAL=\n",
+                "GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PROFILE_SHA256:INTERNAL=" + "b" * 64 + "\n",
+            ),
+            encoding="utf-8",
+        )
+
+        result = receipt.release_optimization(cache, ("arm64", "x86_64"))
+
+        for settings in result["slices"].values():
+            self.assertEqual(settings["pgo_mode"], "committed")
+            self.assertEqual(settings["profile_sha256"], text_sha)
+            self.assertEqual(settings["pgo_stale"], ["source/mc68k"])
+
+    def test_committed_pgo_requires_the_applied_profile(self) -> None:
+        cache = self.committed_cache(
+            "GEARMULATOR_MDMM_APPLE_PGO_COMMITTED_SHA256:INTERNAL=" + "a" * 64 + "\n"
+        )
+        with self.assertRaisesRegex(RuntimeError, "did not apply the committed PGO profile"):
+            receipt.release_optimization(cache)
+
+    def test_committed_pgo_fallback_is_recorded_as_none(self) -> None:
+        cache = self.committed_cache(
+            "GEARMULATOR_MDMM_APPLE_PGO_FALLBACK:INTERNAL=no committed profile\n",
+            applied="none",
+        )
+
+        result = receipt.release_optimization(cache)
+
+        for settings in result["slices"].values():
+            self.assertEqual(settings["pgo_mode"], "none")
+            self.assertEqual(settings["pgo_fallback"], "no committed profile")
+
     def test_release_optimization_rejects_silent_fallbacks(self) -> None:
         cases = (
             ({"thinlto": "OFF"}, "require ThinLTO"),
             ({"optimize_dsp": "OFF"}, "require ThinLTO"),
-            ({"pgo_mode": "generate"}, "PGO mode none or use"),
+            ({"pgo_mode": "generate"}, "PGO mode none, use or committed"),
         )
         for options, message in cases:
             with self.subTest(options=options), self.assertRaisesRegex(RuntimeError, message):

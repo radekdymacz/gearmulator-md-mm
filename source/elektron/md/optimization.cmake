@@ -4,9 +4,14 @@ option(GEARMULATOR_MDMM_APPLE_THINLTO
 	"Enable Apple Clang ThinLTO for MD/MM core Release builds" OFF)
 option(GEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP
 	"Include DSP libraries in the selected MD/MM Apple optimizations" OFF)
+# committed: the profile kept in the repository (pgo/mdmm-macos.proftext, trained locally with
+# scripts/macos/train_mdmm_pgo.sh), converted at configure time by this compiler's llvm-profdata. Any
+# architecture list (one profile for both slices of the universal build), a stale profile only warns, and a
+# missing profile or tool falls back to the ThinLTO build with a warning. use: the strict per-architecture
+# path with a private profile and provenance (doc/mdmm-apple-optimization.md).
 set(GEARMULATOR_MDMM_APPLE_PGO_MODE "none" CACHE STRING
-	"MD/MM Apple profile-guided optimization: none, generate, or use")
-set_property(CACHE GEARMULATOR_MDMM_APPLE_PGO_MODE PROPERTY STRINGS none generate use)
+	"MD/MM Apple profile-guided optimization: none, generate, use, or committed")
+set_property(CACHE GEARMULATOR_MDMM_APPLE_PGO_MODE PROPERTY STRINGS none generate use committed)
 set(GEARMULATOR_MDMM_APPLE_PGO_PROFILE "" CACHE FILEPATH
 	"Merged profile from the same source, compiler and architecture")
 set(GEARMULATOR_MDMM_GNU_PGO_MODE "none" CACHE STRING
@@ -26,13 +31,16 @@ set(GEARMULATOR_MDMM_MSVC_PGO_DIRECTORY "" CACHE PATH
 unset(GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_TARGETS CACHE)
 unset(GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PGO_MODE CACHE)
 unset(GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PROFILE_SHA256 CACHE)
+unset(GEARMULATOR_MDMM_APPLE_PGO_COMMITTED_SHA256 CACHE)
+unset(GEARMULATOR_MDMM_APPLE_PGO_STALE CACHE)
+unset(GEARMULATOR_MDMM_APPLE_PGO_FALLBACK CACHE)
 unset(GEARMULATOR_MDMM_GNU_OPTIMIZATION_APPLIED_TARGETS CACHE)
 unset(GEARMULATOR_MDMM_GNU_OPTIMIZATION_APPLIED_PGO_MODE CACHE)
 unset(GEARMULATOR_MDMM_MSVC_OPTIMIZATION_APPLIED_TARGETS CACHE)
 unset(GEARMULATOR_MDMM_MSVC_OPTIMIZATION_APPLIED_PGO_MODE CACHE)
 
-if(NOT GEARMULATOR_MDMM_APPLE_PGO_MODE MATCHES "^(none|generate|use)$")
-	message(FATAL_ERROR "GEARMULATOR_MDMM_APPLE_PGO_MODE must be none, generate, or use")
+if(NOT GEARMULATOR_MDMM_APPLE_PGO_MODE MATCHES "^(none|generate|use|committed)$")
+	message(FATAL_ERROR "GEARMULATOR_MDMM_APPLE_PGO_MODE must be none, generate, use, or committed")
 endif()
 if(NOT GEARMULATOR_MDMM_GNU_PGO_MODE MATCHES "^(none|generate|use)$")
 	message(FATAL_ERROR "GEARMULATOR_MDMM_GNU_PGO_MODE must be none, generate, or use")
@@ -152,6 +160,8 @@ if(NOT GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "none")
 	if(NOT GEARMULATOR_MDMM_APPLE_THINLTO)
 		message(FATAL_ERROR "Enable GEARMULATOR_MDMM_APPLE_THINLTO for MD/MM PGO")
 	endif()
+endif()
+if(GEARMULATOR_MDMM_APPLE_PGO_MODE MATCHES "^(generate|use)$")
 	list(LENGTH CMAKE_OSX_ARCHITECTURES _mdmm_arch_count)
 	if(NOT _mdmm_arch_count EQUAL 1)
 		message(FATAL_ERROR "MD/MM PGO requires one explicit CMAKE_OSX_ARCHITECTURES value; train and build each architecture separately")
@@ -159,7 +169,20 @@ if(NOT GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "none")
 endif()
 
 set(_mdmm_pgo_option "")
-if(GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "generate")
+set(_mdmm_applied_pgo_mode "${GEARMULATOR_MDMM_APPLE_PGO_MODE}")
+if(GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "committed")
+	include(${CMAKE_CURRENT_LIST_DIR}/pgo/committedProfile.cmake)
+	mdmm_committed_pgo_profile(_mdmm_profile _mdmm_fallback)
+	if(_mdmm_profile)
+		set(_mdmm_pgo_option "-fprofile-instr-use=${_mdmm_profile}")
+		file(SHA256 "${_mdmm_profile}" _mdmm_profile_sha256)
+	else()
+		message(WARNING "MD/MM PGO: building WITHOUT the committed profile (ThinLTO only): ${_mdmm_fallback}")
+		set(_mdmm_applied_pgo_mode "none")
+		set(GEARMULATOR_MDMM_APPLE_PGO_FALLBACK "${_mdmm_fallback}" CACHE INTERNAL
+			"Why the committed MD/MM profile was not applied" FORCE)
+	endif()
+elseif(GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "generate")
 	set(_mdmm_pgo_option "-fprofile-instr-generate")
 elseif(GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "use")
 	if(NOT EXISTS "${GEARMULATOR_MDMM_APPLE_PGO_PROFILE}"
@@ -186,12 +209,19 @@ foreach(_mdmm_target IN LISTS _mdmm_optimization_targets)
 	if(_mdmm_pgo_option)
 		target_compile_options(${_mdmm_target} PRIVATE "$<$<CONFIG:Release>:${_mdmm_pgo_option}>")
 		target_link_options(${_mdmm_target} INTERFACE "$<$<CONFIG:Release>:${_mdmm_pgo_option}>")
-		if(GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "use")
+		if(GEARMULATOR_MDMM_APPLE_PGO_MODE MATCHES "^(use|committed)$")
 			target_compile_definitions(${_mdmm_target} PRIVATE
 				"$<$<CONFIG:Release>:GEARMULATOR_MDMM_PGO_PROFILE_SHA256=\"${_mdmm_profile_sha256}\">")
+		endif()
+		if(GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "use")
 			# A mismatched profile is not a validated optimization build.
 			target_compile_options(${_mdmm_target} PRIVATE
 				"$<$<CONFIG:Release>:-Werror=profile-instr-out-of-date>")
+		elseif(GEARMULATOR_MDMM_APPLE_PGO_MODE STREQUAL "committed")
+			# Functions changed since training (and the x86_64 slice's own code) simply get no profile data:
+			# clang's out-of-date summary per file stays a warning, the staleness check above names the cause.
+			target_compile_options(${_mdmm_target} PRIVATE
+				"$<$<CONFIG:Release>:-Wno-error=profile-instr-out-of-date>")
 		endif()
 	endif()
 endforeach()
@@ -200,10 +230,10 @@ set(GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_TARGETS
 	"${_mdmm_optimization_targets}" CACHE INTERNAL
 	"MD/MM targets that received Apple Release optimization" FORCE)
 set(GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PGO_MODE
-	"${GEARMULATOR_MDMM_APPLE_PGO_MODE}" CACHE INTERNAL
+	"${_mdmm_applied_pgo_mode}" CACHE INTERNAL
 	"PGO mode actually applied to MD/MM Release targets" FORCE)
 set(GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PROFILE_SHA256
 	"${_mdmm_profile_sha256}" CACHE INTERNAL
 	"SHA-256 of the profile actually applied to MD/MM Release targets" FORCE)
 
-message(STATUS "MD/MM Apple Release optimization: ThinLTO, PGO=${GEARMULATOR_MDMM_APPLE_PGO_MODE}, targets=${_mdmm_optimization_targets}")
+message(STATUS "MD/MM Apple Release optimization: ThinLTO, PGO=${_mdmm_applied_pgo_mode}, targets=${_mdmm_optimization_targets}")

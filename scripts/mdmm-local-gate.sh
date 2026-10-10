@@ -250,7 +250,7 @@ stage_build() {
 	flags=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="${ARCH}" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
 		-DCMAKE_OSX_SYSROOT="${SDKROOT}" -DXCODE_VERSION="${XCODE_VERSION:-16}"
 		-DGEARMULATOR_MDMM_APPLE_THINLTO=ON -DGEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP=ON
-		-DGEARMULATOR_MDMM_APPLE_PGO_MODE=none -DGEARMULATOR_MDMM_APPLE_PGO_PROFILE=
+		-DGEARMULATOR_MDMM_APPLE_PGO_MODE=committed -DGEARMULATOR_MDMM_APPLE_PGO_PROFILE=
 		-DGEARMULATOR_JUCE_PRODUCTS_ROOT="${BUILD}/products" -DBUILD_TESTING=ON)
 	if [ "${QUICK}" = 1 ]; then
 		flags+=(-Dgearmulator_BUILD_JUCEPLUGIN=OFF)
@@ -298,6 +298,14 @@ stage_build() {
 	local built
 	built="$(cache_value CMAKE_BUILD_TYPE:STRING) ${ARCH}, ThinLTO $(cache_value GEARMULATOR_MDMM_APPLE_THINLTO:BOOL)"
 	built+=", DSP optimisation $(cache_value GEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP:BOOL)"
+	# The committed PGO profile (L6): applied, stale (retrain: scripts/macos/train_mdmm_pgo.sh) or missing.
+	built+=", PGO $(cache_value GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PGO_MODE:INTERNAL)"
+	if [ -n "$(cache_value GEARMULATOR_MDMM_APPLE_PGO_FALLBACK:INTERNAL)" ]; then
+		built+=" (NOT applied: $(cache_value GEARMULATOR_MDMM_APPLE_PGO_FALLBACK:INTERNAL))"
+	elif [ -n "$(cache_value GEARMULATOR_MDMM_APPLE_PGO_STALE:INTERNAL)" ]; then
+		built+=" (STALE for $(cache_value GEARMULATOR_MDMM_APPLE_PGO_STALE:INTERNAL): retrain before the tag,"
+		built+=" scripts/macos/train_mdmm_pgo.sh)"
+	fi
 	if [ "${QUICK}" = 1 ]; then built+=", NO plug-ins (--quick)"; fi
 	stage_end PASS "${built}; ${registered}"
 }
@@ -934,6 +942,8 @@ record_identity() {
 	info_set build_dir "${BUILD}"; info_set arch "${ARCH}"; info_set started "${STARTED}"
 	info_set thinlto "$(cache_value GEARMULATOR_MDMM_APPLE_THINLTO:BOOL)"
 	info_set dsp_optimised "$(cache_value GEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP:BOOL)"
+	info_set pgo "$(cache_value GEARMULATOR_MDMM_APPLE_OPTIMIZATION_APPLIED_PGO_MODE:INTERNAL)"
+	info_set pgo_stale "$(cache_value GEARMULATOR_MDMM_APPLE_PGO_STALE:INTERNAL)"
 	info_set build_type "$(cache_value CMAKE_BUILD_TYPE:STRING)"
 	info_set host "$(sysctl -n machdep.cpu.brand_string 2> /dev/null || uname -m)"
 	info_set macos "$(sw_vers -productVersion 2> /dev/null || echo ?)"

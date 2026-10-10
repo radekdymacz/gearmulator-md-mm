@@ -1,0 +1,33 @@
+{
+ "schema": "gearmulator.mdmm.committed-pgo-profile.v1",
+ "about": "The committed MD/MM PGO profile (lever L6): what it was trained on. Written by scripts/macos/train_mdmm_pgo.sh; read by source/elektron/md/pgo/committedProfile.cmake, which warns when a folder under 'sources' has another git tree than here (stale).",
+ "profile": {
+  "file": "mdmm-macos.proftext",
+  "format": "llvm text (front-end instrumentation), sparse",
+  "sha256": "7ba35da40f2a3deffca9d2f23ef39f2707957f49fa0fc5501504e65b9033f0ce",
+  "functions": 9184
+ },
+ "trained": {
+  "commit": "bf523cbf69addaf0c563f858f93c258fb584cfd7",
+  "architecture": "arm64",
+  "compiler": "Apple clang version 17.0.0 (clang-1700.6.3.2)",
+  "workload": [
+   "mdmmPerfGateTest md 8 --scenario md-busy --outputs all (stopped, then playing)",
+   "mdmmPerfGateTest md 8 --scenario md-factory --outputs all (stopped, then playing)",
+   "mdmmPerfGateTest md 8 --scenario md-song --outputs all (stopped, then playing)",
+   "mdmmPerfGateTest mm 8 --scenario mm-a01 --outputs all (stopped, then playing)",
+   "mdmmPerfGateTest mm 8 --scenario mm-busy --outputs all (stopped, then playing)",
+   "mdmmPerfGateTest mm 8 --scenario mm-song --outputs all (stopped, then playing)"
+  ],
+  "firmware_sha256": {
+   "MD": "68542e30917b9918ccaee2b2237df62c8a00479938680b85aca93ce4fbca44c8",
+   "MM": "369849175602e20a9dd2b6e0ad8ac404b76f82718b14afbf1cbc01b7acabec7e"
+  }
+ },
+ "sources": {
+  "source/elektron/md/mdLib": "9408de378bd8ce2f05d70478faa081e3e733a1f3",
+  "source/mc68k": "d7cca29d9fab6bd891788cbf9e847623eca7d5c2",
+  "source/dsp56300/source/dsp56kEmu": "ad30b801530bf296ccdfc70da3ad843559d7e5f6",
+  "source/dsp56300/source/dsp56kBase": "80e00fb18b1299dda6c06f797d1172ca9257d2cb"
+ }
+}
