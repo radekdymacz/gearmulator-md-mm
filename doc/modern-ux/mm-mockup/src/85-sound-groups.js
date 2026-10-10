@@ -39,7 +39,7 @@ const MM_FIXED_TAB={
  AMP:[SGM("Envelope","ATK HOLD DEC REL","amp"),SGM("Drive","DIST","dist"),SGM("Level · pan","VOL PAN","pan"),SGM("Glide","PORT",null,"PORT: the slide from the note before (KIT › TRIG says when).")],
  FLT:[SGM("Filter","BASE WDTH HPQ LPQ","flt"),SGM("Filter env","ATK DEC BOFS WOFS","fenv")],
  EFX:[SGM("EQ","EQF EQG","eq"),SGM("Sample rate","SRR","srr",null,2),SGM("Delay","DTIM DSND DFB","delay"),SGM("Delay filter","DBAS DWID","dflt")]};
-const MM_PG_WORD={SYN:"SYN",AMP:"AMP",FLT:"FILTER",EFX:"EFFECTS"};
+const MM_PG_WORD={SYN:"synth",AMP:"amp",FLT:"filter",EFX:"effects",MID:"midi"};
 const sgKey=t=>t.toLowerCase().replace(/[^a-z0-9]+/g,"-");
 /* one page's groups: the table's names resolved to slots, the knobs it leaves out in a group of their own */
 function mmPageGroups(pg,names,table){const out=[],used=new Set();

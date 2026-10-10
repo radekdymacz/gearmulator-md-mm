@@ -68,7 +68,7 @@ The gap list is [MM-PARITY-2026-10-09.md](../modern-ux/MM-PARITY-2026-10-09.md);
 | 2 | Step selection, ⌘C/V/X/D/A, move and extend, ⌘-drag copy, the step menu, fill moved to the menu, Delete and the LCD COPY/CLR/PASTE on the selection | M-L |
 | 3 | Piano roll: note length like Ableton/Digitakt (I-010), draw toggle and box select (I-007) | M |
 | 4 | The live-recording lock marker, the keyboard view's missing tips, the MD journeys the MM lacks | S-M |
-| 5 | The Sound page layout and GEN/MUTATE as on the MD, where the parity list marks them "a" | M |
+| 5 | The Sound page layout and GEN/MUTATE as on the MD, where the parity list marks them "a" (built on `feat/mm-slice5`: one source for both, MM-PARITY-2026-10-09.md §2b) | M |
 
 ## Emulation CPU step 2 (in 0.5, Radek 2026-10-10)
 

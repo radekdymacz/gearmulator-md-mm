@@ -50,30 +50,11 @@ function sgHtml(x, cols, color, tag, note) {
 	const body = x.body || `<div class="ctl" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${x.knobs.map(n => pc(x.g, n, { color: SND_COL[x.g] || color })).join("")}</div>`;
 	return `<section class="sg" data-sg="${x.key}"><header><h3>${mutTitle(x)}</h3>${tag ? `<span title="${attr(x.tagTip || "Its knobs are on the Machinedrum's " + page + " page")}">${SND_TAG[x.g][0]}</span>` : ""}</header>${x.plot || (note ? `<p class="sgnote">${note}</p>` : "")}${body}</section>`;
 }
-/* One row: a grid of columns over three lines (titles, screens, boxes). A group with a screen is a
-   column of its own (as wide as its boxes, but never narrower than about two of them, a waveform
-   wider); the ones without pair up in one column (a lone one says what its knobs do). A row without
-   any screen is two lines, its groups side by side. */
-function sgRow(list, cls, color) {
-	if (!list.length) return "";
-	let prev = ""; const first = x => prev !== x.g && (prev = x.g), n = x => x.n ?? x.knobs.length;
-	const narrow = list.reduce((a, x) => a + n(x), 0) > 10 ? 1.8 : 2.6, w = x => x.w ?? (x.ed === "sample" ? 6 : x.ed === "rec" ? 5 : x.plot ? Math.max(n(x), narrow) : n(x));
-	const tracks = cols => `grid-template-columns:${cols.map(c => `minmax(min-content,${c}fr)`).join(" ")}`;
-	if (!list.some(x => x.plot)) {
-		const ws = list.map(x => Math.max(1.4, w(x)));
-		return `<div class="sgrow flat ${cls}" style="${tracks(list.about ? [...ws, 4] : ws)}">${list.map(x => `<div class="sgcol">${sgHtml(x, n(x), color, first(x))}</div>`).join("")}${list.about ? `<p class="sgabout">${list.about}</p>` : ""}</div>`;
-	}
-	const cols = [], stacks = [];
-	for (const x of list) {
-		if (x.plot) { cols.push([x]); continue; }
-		const s = stacks[stacks.length - 1];
-		if (s && s.length < 2) s.push(x); else { const c = [x]; stacks.push(c); cols.push(c); }
-	}
-	return `<div class="sgrow ${cls}" style="${tracks(cols.map(c => Math.max(...c.map(w))))}">${cols.map(c => {
-		const cn = Math.max(...c.map(n)), kind = c[0].plot ? "" : c.length > 1 ? " stack" : " lone";
-		return `<div class="sgcol${kind}">${c.map(x => sgHtml(x, cn, color, first(x), kind === " lone" ? x.note || about(V.tracks[S.sel].m, Cat) : "")).join("")}</div>`;
-	}).join("")}</div>`;
-}
+/* One row (shared/deskSoundLayout.js soundRow): a group with a screen is a column of its own (a waveform wider),
+   the ones without pair up; a lone one says what its knobs do (the machine's about when it has no note) */
+const SND_ROW = { page: x => x.g, count: x => x.knobs.length, narrow: [10, 1.8, 2.6], min: "min-content", edWidth: { sample: 6, rec: 5 },
+	lone: x => x.note || about(V.tracks[S.sel].m, Cat) };
+function sgRow(list, cls, color) { return soundRow(list, cls, Object.assign({ group: (x, cols, first, note) => sgHtml(x, cols, color, first, note) }, SND_ROW)); }
 function renderSound() {
 	const t = S.sel, tr = V.tracks[t], l = tr.lfo, at = smpOfMachine(tr.m), color = FAMC[tr.fam];
 	const relSel = (id, kind, word) => `<select id="${id}"><option value="">none</option>${V.tracks.map((x, i) => i !== t ? `<option value="${i}" ${tr[kind] === i ? "selected" : ""}>${word} ${i + 1} ${x.name}</option>` : "").join("")}</select>`;

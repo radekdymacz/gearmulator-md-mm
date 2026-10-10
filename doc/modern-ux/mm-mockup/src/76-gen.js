@@ -87,14 +87,8 @@ function genVal(k,d){const lim=(v,a,b)=>Math.max(a,Math.min(b,v));
   if(k==="nscale")n.scale=genCycle(MM_SCALES,n.scale,d);
   if(k==="nrange"){n.range=lim(n.range+(d>0?1:-1),1,2);n.root=Math.min(n.root,127-12*n.range)}}
  genLive()}
-/* The bars' pieces (the Machinedrum Editor's): a group (a title on a thin rule over its controls), a value (an LCD
-   window, its label inside), a key (a small square cap with its keyboard key on it and a tiny label over it). */
-const gbg=(label,body,cls="",tip="")=>`<div class="gbg ${cls}"${tip?` title="${tip}"`:""}><span class="gbl">${label}</span><div class="gbc">${body}</div></div>`;
-const gv=(k,label,v,tip)=>`<span class="gv" data-gv="${k}" role="spinbutton" tabindex="0" aria-label="${label}" aria-valuenow="${parseInt(v)||0}" title="${tip}. Drag up or down, scroll, or click (⇧-click: down)."><small>${label}</small><b>${v}</b></span>`;
-const gkc=(attr,act,cap,label,tip)=>`<button class="kc" ${attr}="${act}" title="${tip}" aria-label="${label}"><small>${label}</small><kbd>${cap}</kbd></button>`;
-const randKey=tip=>`<button class="kc cream krand" data-rand="1" title="${tip}" aria-label="Randomise"><small>Random <em>⌥R all</em></small><kbd>R</kbd></button>`;
-const gtitle=(name,target,all,tip)=>`<div class="gbt" title="${tip}"><b>${name}</b><span class="${all?"all":""}">${target}</span></div>`;
-const gseg=(attr,cur,items,tips)=>`<span class="seg">${items.map(([k,n])=>`<button ${attr}="${k}" aria-pressed="${cur===k}" title="${tips[k]}">${n}</button>`).join("")}</span>`;
+/* The bars' pieces (gbg, gv, kc, randKey, gtitle, gseg) and their clicks, wheel and arrows: shared/deskGenBar.js,
+   the Machinedrum Editor's. */
 function genNotesHtml(sp,t){const n=sp.notes;if(!n||sp.kind==="keep"||isMidiT(t))return"";const kit=n.motion==="kit"||trk(t).m==="DPRO-BBOX";
  const mot=gv("nmot","Notes",n.motion==="off"?"off":n.motion,kit?"Off: the steps keep their drums (a new one takes the last). KIT: each hit picks BD1, SD1, CH or OH":"Off: the steps keep their pitch (a new one takes the track's last note). STEP: a walk of 1 or 2 scale degrees from the root. LEAP: any note of the range");
  const seed=sp.kind==="euclid"&&n.motion!=="off"?gv("seed","Seed",sp.seed,"The same seed gives the same notes"):"";
@@ -116,7 +110,7 @@ function genStripHtml(){const t=S.sel,tr=trk(t),sp=genSpec(t),all=S.alt,[from,to
  return`${gtitle("Gen",target,all,"Generators: every change writes to the pattern at once. A run of changes on this track is one undo step; Undo takes it back in one step. Alt: every track of the side shown, the whole pattern.")}
   ${mode}${params}${genNotesHtml(sp,t)}
   <div class="gsum" title="${run&&run.applied?"What the run changed, against the pattern before it":"What a change writes"}">${sum}</div>
-  <div class="gkeys">${randKey(all?"Randomise every track of the side: a new variation of each spec, the whole pattern (Alt+R)":`Randomise ${tLabel(t)}: a new variation, ${sp.kind==="random"?"a new seed":sp.kind==="euclid"?"random hits and rotation in the cycle, a new seed for the notes":"nothing while it is set to Keep"} (R). Alt+R or Alt-click: every track`)}${gkc("data-gen","fill","↺","Defaults","Defaults: every track's spec from its machine: a bass 5/16 with a walk in its scale, a lead random 30 % over two octaves, a pad on 1 and 3, the drum box 8/16 on BD SD CH OH; FX machines kept; MIDI tracks 4/16, rhythm only. Writes this track (Alt: every track)")}</div>`}
+  <div class="gkeys">${randKey(all?"Randomise every track of the side: a new variation of each spec, the whole pattern (Alt+R)":`Randomise ${tLabel(t)}: a new variation, ${sp.kind==="random"?"a new seed":sp.kind==="euclid"?"random hits and rotation in the cycle, a new seed for the notes":"nothing while it is set to Keep"} (R). Alt+R or Alt-click: every track`)}${kc("data-gen","fill","↺","Defaults","Defaults: every track's spec from its machine: a bass 5/16 with a walk in its scale, a lead random 30 % over two octaves, a pad on 1 and 3, the drum box 8/16 on BD SD CH OH; FX machines kept; MIDI tracks 4/16, rhythm only. Writes this track (Alt: every track)")}</div>`}
 /* the step gestures behind a small ? key (a click: the list of keys) */
 function stepLegend(){const midi=isMidiT(S.sel),row=(cls,what,how)=>`<span>${cls!=null?`<i class="lg on ${cls}"></i>`:`<i class="lg none"></i>`}<b>${what}</b>${how}</span>`;
  return`<span class="steplegend"><button class="glegkey" id="steplegend" aria-label="Step gestures" aria-describedby="steplegpop">?</button><span class="legend glegpop" id="steplegpop" role="tooltip">${row("","Note","click in the roll; drag up or down for pitch, sideways to paint (alt: erase)")}${midi?"":row("g","Trigless","no envelope trigs (the ENV row)")}${row("y","Note off","alt-click an empty step")}${row("lk","Has locks","a lock on the step")}${row(null,"Fill","⌘-click: every 2nd step from there to the end gets the note (from a note: off); ⌘⇧-click: every 4th")}<small>? the list of keys</small></span></span>`}
@@ -164,30 +158,23 @@ function mutStripHtml(){const t=S.sel,all=S.alt,tr=S.mut.trial&&S.mut.trial.key=
   ${gbg("Scope",`<span class="seg">${chips}</span>${(n=>`<span class="ghint">${n?`+ ${n} group${n===1?"":"s"}`:"+ a group's title"}</span>`)([...S.mut.scope].filter(x=>x.includes(":")).length)}`,"gscope","The DATA pages Mutate moves; click a group's title below to add that group")}
   <div class="gsum" title="${S.mut.note}">${S.mut.note||(midi?"A MIDI track has no sound to move: Alt+R moves every synth track.":"")}</div>
   <div class="gkeys">${randKey(`${all?"Randomise every synth track":`Randomise ${tLabel(t)}`}: a fresh random sound, from the sound before the trial${tr?"":" (this sound)"}. One trial is one undo step (R; Alt+R or Alt-click: every synth track)`)}</div>`}
-function mutBarHtml(){return`<div class="genband mutband" id="mutband">${mutStripHtml()}</div>`}
+function mutBarHtml(){return`<div class="genband mutband" id="mutband" title="The groups follow the sound's path: synthesis and amp, filter and effects, then the three LFOs. Drag a dot or a box; hold Alt to move the same knob on every synth track (Control All).">${mutStripHtml()}</div>`}
 function renderMutStrip(){const host=$("#mutband");if(host)host.innerHTML=mutStripHtml();$$("[data-mutsg]").forEach(b=>b.setAttribute("aria-pressed",S.mut.scope.has(b.dataset.mutsg)))}
 
-/* ---- the bars' clicks, values (drag, wheel, arrows) and keys ---- */
-document.addEventListener("click",e=>{
- const g=e.target.closest("[data-gen]");if(g&&!g.disabled){if(g.dataset.gen==="fill")genDefaults();return}
- const rk=e.target.closest("[data-rand]");if(rk&&!rk.disabled){randomise(e.altKey||e.metaKey||e.ctrlKey);return}
- const k=e.target.closest("[data-genkind]");if(k){genKind(k.dataset.genkind);return}
- const md=e.target.closest("[data-genmode]");if(md){const sp=genSpec();if(sp.mode!==md.dataset.genmode){sp.mode=md.dataset.genmode;genEdited();genLive()}return}
- const v=e.target.closest(".gv[data-gv]");if(v&&!v.dataset.dragged){genVal(v.dataset.gv,e.shiftKey?-1:1);return}
- const c=e.target.closest("[data-mutg],[data-mutsg]");if(c){const id=c.dataset.mutg||c.dataset.mutsg;S.mut.scope.has(id)?S.mut.scope.delete(id):S.mut.scope.add(id);renderMutStrip();mutLive();e.stopPropagation();return}
- if(e.target.closest("#steplegend")){toggleKeys(true);e.stopPropagation()}},true);
+/* ---- the bars' clicks, values and keys: shared/deskGenBar.js (genMode below is the Write group's); here the
+   step legend's ? key and a value's drag ---- */
+/* the Write mode of a random spec (Replace, Add, Thin) */
+function genMode(mode){const sp=genSpec();if(sp.mode===mode)return;sp.mode=mode;genEdited();genLive()}
+document.addEventListener("click",e=>{if(e.target.closest("#steplegend")){toggleKeys(true);e.stopPropagation()}},true);
 let gvDrag=null;
 document.addEventListener("pointerdown",e=>{const v=e.target.closest(".gv[data-gv]");if(!v||e.button!==0)return;gvDrag={v,y:e.clientY,k:v.dataset.gv,acc:0};delete v.dataset.dragged;try{v.setPointerCapture(e.pointerId)}catch(_){}});
 document.addEventListener("pointermove",e=>{if(!gvDrag)return;const d=Math.trunc((gvDrag.y-e.clientY)/6)-gvDrag.acc;if(!d)return;
- gvDrag.acc+=d;gvDrag.v.dataset.dragged="1";genVal(gvDrag.k,d*(gvDrag.k==="dens"||gvDrag.k==="amt"?2:1));
+ gvDrag.acc+=d;gvDrag.v.dataset.dragged="1";genVal(gvDrag.k,d*gvDragStep(gvDrag.k));
  const n=document.querySelector(`.gv[data-gv="${gvDrag.k}"]`);if(n){n.dataset.dragged="1";gvDrag.v=n}});
 document.addEventListener("pointerup",()=>{if(!gvDrag)return;const k=gvDrag.k;gvDrag=null;setTimeout(()=>{const n=document.querySelector(`.gv[data-gv="${k}"]`);if(n)delete n.dataset.dragged},0)});
-document.addEventListener("wheel",e=>{const v=e.target.closest?.(".gv[data-gv]");if(!v)return;e.preventDefault();genVal(v.dataset.gv,((e.deltaY||e.deltaX)<0?1:-1)*(e.shiftKey?10:1))},{passive:false});
-document.addEventListener("keydown",e=>{const v=e.target.closest?.(".gv[data-gv]");if(!v)return;const d={ArrowUp:1,ArrowRight:1,ArrowDown:-1,ArrowLeft:-1}[e.key];if(d==null)return;
- e.preventDefault();e.stopPropagation();const k=v.dataset.gv;genVal(k,d*(e.shiftKey?10:1));document.querySelector(`.gv[data-gv="${k}"]`)?.focus()},true);
-Keys.bind({id:"randomise-track",scope:"any",keys:["R"],code:"KeyR",group:"Selected track",when:kbOn,run:()=>randomise(false),
+Keys.bind({id:"randomise-track",short:"Randomise",scope:"any",keys:["R"],code:"KeyR",group:"Selected track",when:kbOn,run:()=>randomise(false),
  does:"Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation: a new seed, or random hits and rotation"});
-Keys.bind({id:"randomise-all",scope:"any",keys:["R"],code:"KeyR",mod:"alt",group:"All",when:kbOn,run:()=>randomise(true),
+Keys.bind({id:"randomise-all",short:"Randomise all",scope:"any",keys:["R"],code:"KeyR",mod:"alt",group:"All",when:kbOn,run:()=>randomise(true),
  does:"Randomise every track: on Sound every synth track's sound, everywhere else every GEN spec of the side shown over the whole pattern"});
 Keys.bind({id:"gen-value-all",scope:"seq",area:"GEN bar",keys:["GEN value"],mod:"alt",group:"All",does:"Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)"});
 Keys.bind({id:"rkey-all",scope:"any",area:"GEN bar",keys:["R key"],mod:"alt",group:"All",does:"Click: randomise every track (Sound: every synth track; VOL and TUNE stay)"});

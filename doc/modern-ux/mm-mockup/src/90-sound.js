@@ -203,28 +203,16 @@ function sgTitle(x){if(x.titleHtml)return x.titleHtml;if(x.mut===false)return x.
  return`<button class="mutg" data-mutsg="${id}" aria-pressed="${S.mut.scope.has(id)}" title="Add ${attrS(x.title)} to what Mutate moves">${x.title}</button>`}
 const MM_PG_TIP={SYN:"the machine's SYNTHESIS page",AMP:"the AMPLIFICATION page",FLT:"the FILTER page",EFX:"the EFFECTS page",LF1:"LFO 1's page",LF2:"LFO 2's page",LF3:"LFO 3's page",MID:"the MIDI track's page"};
 /* a group: its title on the rule (the page's word on the first group of that page in its row), its screen
-   or what its knobs do, its boxes; each part is a cell of the row's grid (subgrid) */
+   or what its knobs do, its boxes; each part is a cell of the row's grid */
 function sgHtml(x,cols,tag,note){const t=S.sel;
  const body=x.body||`<div class="ctl" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${x.idx.map((i,k)=>pc(x.pg,i,{t,label:x.labels?.[k]||x.knobs[k]})).join("")}</div>`;
  return`<section class="sg" data-sg="${x.pg}:${x.key}"><header><h3>${sgTitle(x)}</h3>${tag?`<span title="Its knobs are on ${MM_PG_TIP[x.pg]||x.pg}">${tag}</span>`:""}</header>${x.plot||(note?`<p class="sgnote" title="${attrS(note)}">${note}</p>`:"")}${body}</section>`}
-/* One row: columns over three lines (titles, screens, boxes) on the page's grid, at the page's grid lines
-   (line0), so every row's screens are as tall. A group with a screen is a column of its own, as wide as its
-   boxes (never narrower than about two); two without a screen share a column (the upper one's boxes at the
-   screens' top, the lower one's title at their foot); a lone one says what its knobs do there. A row
-   without screens is two lines. */
-function sgRow(list,cls,line0){if(!list.length)return"";
- let prev="";const first=x=>{const w=x.tag??MM_PG_WORD[x.pg]??"";if(prev===x.pg)return"";prev=x.pg;return w},n=x=>x.n??x.idx.length;
- const total=list.reduce((a,x)=>a+n(x),0),narrow=total>12?1.8:2.4,w=x=>x.w??(x.plot?Math.max(n(x),narrow):n(x));
- const tracks=cols=>`grid-template-columns:${cols.map(c=>`minmax(0,${c}fr)`).join(" ")}`;
- if(!list.some(x=>x.plot))return`<div class="sgrow flat ${cls}" style="grid-row:${line0}/span 2;${tracks(list.map(x=>Math.max(1.4,w(x))))}">${list.map(x=>`<div class="sgcol">${sgHtml(x,n(x),first(x))}</div>`).join("")}</div>`;
- const cols=[],stacks=[];
- for(const x of list){if(x.plot){cols.push([x]);continue}const s=stacks[stacks.length-1];if(s&&s.length<2)s.push(x);else{const c=[x];stacks.push(c);cols.push(c)}}
- return`<div class="sgrow ${cls}" style="grid-row:${line0}/span 3;${tracks(cols.map(c=>Math.max(...c.map(w))))}">${cols.map(c=>{const cn=Math.max(...c.map(n)),kind=c[0].plot?"":c.length>1?" stack":" lone";
-  return`<div class="sgcol${kind}">${c.map(x=>sgHtml(x,cn,first(x),kind===" lone"?x.note:"")).join("")}</div>`}).join("")}</div>`}
-/* the rows of a page: [[groups], cls]... -> the page's grid template and the rows at their lines */
-function sndRows(rows){let line=2,tpl=["auto"];const html=rows.map(([list,cls])=>{if(!list.length)return"";const flat=!list.some(x=>x.plot);
-  if(line>2){tpl.push("var(--sndgap)");line++}const h=sgRow(list,cls,line);tpl.push(...(flat?["auto","auto"]:["auto","minmax(0,var(--plotmax))","auto"]));line+=flat?2:3;return h}).join("");
- return{tpl:tpl.join(" "),html}}
+/* One row (shared/deskSoundLayout.js soundRow, as the Machinedrum Editor's): a group with a screen is a column of its
+   own, the ones without pair up; a lone one says what its knobs do. The page's word on the first group of a page in
+   the row (a group's own tag wins: an LFO that is off says so). */
+const SND_ROW={page:x=>x.pg,count:x=>x.idx.length,narrow:[12,1.8,2.4],min:"0",lone:x=>x.note,
+ group:(x,cols,first,note)=>sgHtml(x,cols,first?(x.tag??MM_PG_WORD[x.pg]??""):"",note)};
+const sgRow=(list,cls)=>soundRow(list,cls,SND_ROW);
 /* an LFO group: the ~ key and its title, its screen, then PAGE › DEST and TRIG, the eleven shapes, the four boxes */
 function lfoGroup(t,k){const l="LF"+k,v=trk(t).v[l],dn=LPAGES[v[0]]?destNames(t,v[0]):["—"];
  return{key:"lfo",title:"LFO "+k,pg:l,idx:[4,5,6,7],knobs:[4,5,6,7].map(i=>FIXED[l][i]),n:4,w:4,tag:v[7]?"":"off",
@@ -240,7 +228,7 @@ function sndDockKeys(t){const midi=isMidiT(t);return`<span class="snddock" title
 function renderSound(){const t=S.sel,tr=trk(t);let rows,head;
  if(isMidiT(t)){const int=S.tracks[t-6],G=(title,idx,labels,plain)=>({key:sgKey(title),title,pg:"MID",idx,knobs:idx.map(i=>FIXED.MID[i]),labels,mut:false,note:plain});
   const cc=[4,5,6,7].map(i=>"CC "+(tr.cc[i-4]===128?"AFT":tr.cc[i-4]));
-  rows=[[[G("Note",[0,1]),G("Bend · program",[2,3]),G("Controllers",[4,5,6,7],cc),{key:"ccnum",title:"CC numbers",pg:"cc",idx:[0,1,2,3],knobs:["CL1","CL2","CL3","CL4"],mut:false,tag:"GLOBAL"},
+  rows=[[[G("Note",[0,1]),G("Bend · program",[2,3]),G("Controllers",[4,5,6,7],cc),{key:"ccnum",title:"CC numbers",pg:"cc",idx:[0,1,2,3],knobs:["CL1","CL2","CL3","CL4"],mut:false,tag:"global"},
    {key:"lfos",title:"LFOs",pg:"MID",idx:[],knobs:[],n:0,w:4,mut:false,tag:"",body:`<p class="sgabout">MIDI track ${t-5} shares its three LFOs with synth track ${t-5} (${int.m}): an LFO set to PAGE MIDI moves this page. <button class="cream" data-goto="${t-6}">Open T${t-5} LFOs</button></p>`}],"midirow"]];
   head=`<span class="lcdchip" title="The MIDI track's page is stored in the kit; PCHG only sends when it is locked on a step">M${t-5} · CH ${String(tr.ch).padStart(2,"0")}</span>`}
  else{const g=mmSoundGroups(tr.m);
@@ -248,8 +236,7 @@ function renderSound(){const t=S.sel,tr=trk(t);let rows,head;
   const syn=g.SYN.length?g.SYN:[{key:"syn",title:"Synthesis",pg:"SYN",idx:[],knobs:[],n:0,w:3,mut:false,body:`<p class="sgabout">${MACH[tr.m].about}</p>`}];
   rows=[[[...syn,...g.AMP],"srcrow"],[[...g.FLT,...g.EFX],"tonerow"],[[1,2,3].map(k=>lfoGroup(t,k)),"lforow"]];
   head=machButton(tr.m)}
- const R=sndRows(rows);
- $("#main").innerHTML=`<div class="snd" style="grid-template-rows:${R.tpl}"><div class="sndhead">${head}${mutBarHtml()}${sndDockKeys(t)}</div>${R.html}</div>`;
+ $("#main").innerHTML=`<div class="snd mutating"><div class="sndhead">${head}${mutBarHtml()}${sndDockKeys(t)}</div>${rows.map(([list,cls])=>sgRow(list,cls)).join("")}</div>`;
  syncControls();redraw()}
 
 /* machine picker (MD Editor pattern) */

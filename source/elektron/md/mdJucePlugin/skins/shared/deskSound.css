@@ -1,0 +1,31 @@
+/* Sound, both editors (the markup: deskSoundLayout.js soundRow): the track's sound in small groups, in the page's
+   section look: a title on a rule, the machine's page at its right, no frame. Each row is one grid of three lines
+   (titles, screens, boxes) its columns share (subgrid), so a row's titles, screens and boxes are level. Two groups
+   without a screen share a column: the upper one's boxes at the screens' top, the lower one's title at their foot
+   and its boxes on the box line; a lone one says what its knobs do in the screen's place. The rows with screens
+   share the free height evenly, so every screen on the page is as tall; a row without screens is two lines. A
+   group's width follows its box count. Each screen's help is its tooltip. A page sets --sgbox (the box line, 34px)
+   and --sgmax (a row's most, 420px) where its boxes differ. Each page's stylesheet takes this file in at its marker
+   (as deskGenBar.css). */
+#main>.snd{flex:1 1 auto;min-height:0}
+.snd{display:flex;flex-direction:column;gap:16px;min-height:0}
+.sndhead{display:flex;align-items:center;gap:22px;min-width:0}
+.sgrow{flex:1 1 0;min-height:0;max-height:var(--sgmax,420px);display:grid;grid-template-rows:auto minmax(0,1fr) var(--sgbox,34px);column-gap:14px;row-gap:7px;min-width:0}
+.sgrow.flat{flex:none;grid-template-rows:auto var(--sgbox,34px)}
+/* a column takes its row's three lines (subgrid); an engine without subgrid (macOS 12, Safari 15) skips that and
+   keeps the same three lines of its own: one-line titles and one box line, so they are level all the same */
+.sgcol{grid-row:1/-1;display:grid;grid-template-rows:auto minmax(0,1fr) var(--sgbox,34px);grid-template-rows:subgrid;row-gap:7px;min-width:0}
+.sgrow.flat>.sgcol{grid-template-rows:auto var(--sgbox,34px);grid-template-rows:subgrid}
+.sg{display:contents}
+.sg>*{grid-column:1}
+.sg>header{grid-row:1;border-top:2px solid var(--print);padding-top:7px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
+.sg h3{margin:0;font:600 12px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sg>header>span{font:12px var(--mono);color:var(--print3);white-space:nowrap;cursor:help}
+.sg>.plot{grid-row:2;position:relative;min-height:0;border-radius:4px;overflow:hidden}
+.sg>:is(.ctl,.sgline,.sgsel,.sgabout){grid-row:3;align-self:start;min-width:0}
+.sgrow.flat .sg>:is(.ctl,.sgline,.sgsel,.sgabout){grid-row:2}
+/* two groups in one column: the upper one's boxes at the screens' top, the lower one's title at their foot */
+.sgcol.stack>.sg:first-child>:not(header){grid-row:2;align-self:start}
+.sgcol.stack>.sg:last-child>header{grid-row:2;align-self:end}
+/* a lone group: what its knobs do where the screen would be */
+.sgnote{grid-row:2;margin:0;align-self:start;font:12px var(--mono);line-height:1.5;color:var(--print3);overflow:hidden;min-height:0}

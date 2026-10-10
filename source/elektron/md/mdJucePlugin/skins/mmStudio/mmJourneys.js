@@ -1300,6 +1300,18 @@ const MmJourneys = (() => {
 	const shotsGlobal = { name: "mm-shots-global", needs: () => !/mm-shots/.test(location.search) ? "screenshots only when asked by name" : null,
 		steps: [{ say: "open GLOBAL", act: async u => { u.click("#globkey"); await sleep(800); shot("global-mm"); }, screen: () => ok(!$1("#globpop").hidden, "closed"), hold },
 			{ say: "Esc", act: u => { u.key("Escape"); shot("done"); } }] };
+	/* 0.5 slice 5: the Sound page and the GEN bar as screenshots, beside the Machinedrum Editor's (md-shots-sound) */
+	const shotsSound = { name: "mm-shots-sound", needs: () => !/mm-shots/.test(location.search) ? "screenshots only when asked by name" : null,
+		steps: [go("sound"), sel(0),
+			{ say: "the Sound page", act: async () => { await sleep(800); shot("sound-mm"); Journey.snapshot("sound-mm"); Bridge.log("MEASURE sound-mm screens " + [...document.querySelectorAll(".snd .sg>.plot")].map(e => Math.round(e.getBoundingClientRect().height)).join(" ") + " page " + Math.round(document.querySelector(".snd").scrollHeight) + "/" + Math.round(document.querySelector("#main").clientHeight)); }, hold },
+			go("seq"),
+			{ say: "the GEN bar: Euclid and Random, its keys inside the bar", act: async u => {
+				const fits = () => { const b = $1("#genband").getBoundingClientRect(), k = $1("#genband .gkeys").getBoundingClientRect(); return Math.round(b.right - k.right); };
+				const m = []; for (const kind of ["random", "euclid"]) { u.click(`[data-genkind="${kind}"]`); await sleep(400); m.push(kind + " " + fits()); }
+				Bridge.log("MEASURE gen-mm room " + m.join(", ") + " at " + innerWidth); },
+				screen: () => ok($1("#genband .gkeys").getBoundingClientRect().right <= $1("#genband").getBoundingClientRect().right + 1, "R and Defaults cut off") },
+			{ say: "the GEN bar", act: async () => { await sleep(800); shot("gen-mm"); Journey.snapshot("gen-mm"); }, hold },
+			{ say: "done", act: () => shot("done") }] };
 	/* I-008: the editor's menu (shared/deskJourney.js editorMenuJourney), as the Machinedrum's */
 	const editorMenuJ = Journey.editorMenuJourney("mm-top-editor-menu", "Monomachine Editor");
 	const all = [bootCard, firstBeat, spaceKey, tempoDrag, patNext, wsKeys, helpKeys, plate, undoRedo, gridRecord, slidePaint, lenKey, lockLane, arpDock, arpRange, trnKeys,
@@ -1308,7 +1320,7 @@ const MmJourneys = (() => {
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, syxImportMute, osCopyPaste, rotateUndo, faderUndo, tapTempoShift, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal];
+		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, syxImportMute, osCopyPaste, rotateUndo, faderUndo, tapTempoShift, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal, shotsSound];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }

@@ -1836,6 +1836,7 @@
 			"group": "Selected track",
 			"does": "Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation: a new seed, or random hits and rotation",
 			"code": "KeyR",
+			"short": "Randomise",
 			"dispatched": true
 		},
 		{
@@ -1848,6 +1849,7 @@
 			"group": "All",
 			"does": "Randomise every track: on Sound every synth track's sound, everywhere else every GEN spec of the side shown over the whole pattern",
 			"code": "KeyR",
+			"short": "Randomise all",
 			"dispatched": true
 		},
 		{

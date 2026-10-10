@@ -47,16 +47,15 @@ document.getElementById("main").addEventListener("pointermove", e => {
 });
 document.addEventListener("pointerup", () => { const d = Held.end("chop"); if (d) { d.c.dataset.moved = d.moved ? "1" : ""; Gesture.end(); } });
 
-/* ===== GEN and MUTATE values: dragged up or down, the wheel ===== */
+/* ===== GEN and MUTATE values: dragged up or down (their clicks, wheel and arrows: shared/deskGenBar.js) ===== */
 document.addEventListener("pointerdown", e => { const v = e.target.closest(".gv[data-gv]"); if (!v || e.button !== 0) return; Held.begin("gv", { v, y: e.clientY, k: v.dataset.gv, acc: 0 }); delete v.dataset.dragged; grabPointer(v, e); });
 document.addEventListener("pointermove", e => {
 	const g = Held.as("gv"); if (!g) return; const d = Math.trunc((g.y - e.clientY) / 6) - g.acc; if (!d) return;
-	Held.with("gv", { acc: g.acc + d }); g.v.dataset.dragged = "1"; genVal(g.k, d * (g.k === "dens" || g.k === "amt" || g.k === "racc" ? 2 : 1));
+	Held.with("gv", { acc: g.acc + d }); g.v.dataset.dragged = "1"; genVal(g.k, d * gvDragStep(g.k));
 	/* the bar was drawn again: the value's new element */
 	const n = document.querySelector(`.gv[data-gv="${g.k}"]`); if (n) { n.dataset.dragged = "1"; Held.with("gv", { v: n }); }
 });
 document.addEventListener("pointerup", () => { const g = Held.end("gv"); if (!g) return; const k = g.k; setTimeout(() => { const n = document.querySelector(`.gv[data-gv="${k}"]`); if (n) delete n.dataset.dragged; }, 0); });
-document.addEventListener("wheel", e => { const v = e.target.closest(".gv[data-gv]"); if (!v) return; e.preventDefault(); genVal(v.dataset.gv, ((e.deltaY || e.deltaX) < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1)); }, { passive: false });
 
 /* ===== Rotate (mdDeskComforts.js): the presses while Alt is down are one run, one undo step ===== */
 addEventListener("keyup", e => { if (e.key === "Alt") Held.end("rotate"); }, true);
