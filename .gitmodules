@@ -1,6 +1,3 @@
-[submodule "source/dsp56300"]
-	path = source/dsp56300
-	url = https://github.com/joelanders/dsp56300-md-mm.git
 [submodule "source/JUCE"]
 	path = source/JUCE
 	url = https://github.com/joelanders/JUCE-md-mm.git
