@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MD + MM Editor 0.4.0 release notes</title>
+<meta name="description" content="A release on top of 0.3.5: a lighter emulation, drag and drop on the Mac, the machines&#x27; MIDI out, and the fixes from a code review and from your reports.">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#fbfbf7">
+<link rel="canonical" href="https://mdmm.dev/releases/0.4.0/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MD + MM Editor">
+<meta property="og:title" content="MD + MM Editor 0.4.0 release notes">
+<meta property="og:description" content="A release on top of 0.3.5: a lighter emulation, drag and drop on the Mac, the machines&#x27; MIDI out, and the fixes from a code review and from your reports.">
+<meta property="og:url" content="https://mdmm.dev/releases/0.4.0/">
+<meta property="og:image" content="https://mdmm.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Free editors for Machinedrum and Monomachine, beside a screenshot of the Machinedrum Editor's step grid and GEN bar.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MD + MM Editor 0.4.0 release notes">
+<meta name="twitter:description" content="A release on top of 0.3.5: a lighter emulation, drag and drop on the Mac, the machines&#x27; MIDI out, and the fixes from a code review and from your reports.">
+<meta name="twitter:image" content="https://mdmm.dev/og.png">
+<link rel="stylesheet" href="/design/tokens.css">
+<link rel="stylesheet" href="/assets/site.css?v=20261010">
+<script src="/assets/theme.js?v=20261008"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="MD + MM Editor, home"><i class="dot" aria-hidden="true"></i><b>MD + MM Editor</b></a>
+    <nav class="nav" aria-label="Main">
+      <a class="opt" href="/#features">Features</a>
+      <a class="keep" href="/guide/">Guide</a>
+      <a class="opt" href="/#faq">FAQ</a>
+      <a class="disc" href="https://discord.gg/8xwXwBHbtn" aria-label="Discord community"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11.5H2.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="5.5" cy="7.5" r="1" fill="currentColor"/><circle cx="8" cy="7.5" r="1" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1" fill="currentColor"/></svg><span>Discord</span></a>
+      <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/get/">Download free</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="checkout legalpage guide">
+  <div class="wrap">
+    <span class="eyebrow">Release notes</span>
+    <h1>Machinedrum Editor + Monomachine Editor 0.4.0</h1>
+<p><small>Released 2026-10-10</small></p>
+<p>A release on top of <a href="/releases/0.3.5/">0.3.5</a>: a lighter emulation, drag and drop on the Mac, the machines' MIDI out, and the fixes from a code review and from your reports.</p>
+<p>Screenshots, features and FAQ: <b><a href="https://mdmm.dev">https://mdmm.dev</a></b> · User guide: <b><a href="https://mdmm.dev/guide/">https://mdmm.dev/guide/</a></b></p>
+<h2>Faster</h2>
+<ul>
+<li><b>The emulation does less work</b> (both editors, B-005, B-028). Four speed-ups in the emulated processor, and the sound is bit for bit the same. Per audio frame the Machinedrum needs about 15 % less work stopped and 16 % playing, the Monomachine 19 % and 21 %. One instance takes 16 to 19 % less CPU, and the longest buffer while you edit is 17 to 27 % shorter. Measured on an M4 Pro; not yet checked in a DAW on an M1.
+</li>
+<li><b>To compare</b>, choose <b>Developer &gt; Speed-ups off (legacy emulation, slower)</b> in the right-click menu, or start your DAW with <code>GEARMULATOR_MDMM_SPEEDUPS=0</code>. Both give the same sound; only the CPU differs. If a click or a timing difference goes away with them off, tell us.
+</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li><b>The buttons on the plug-in's messages work again</b> (both editors). Since 0.3.0, pressing a button on a message or question from the plug-in did nothing, the update banner's Update, Download and Restart included. The answer now reaches the plug-in, and a question is answered once.
+</li>
+<li><b>Saving a project holds up the audio for a fraction of a millisecond</b> (both editors, B-034). The machine's state is copied under the plug-in's lock and encoded after it: 0.13 to 0.24 ms in the Machinedrum Editor, 0.04 to 0.45 ms in the Monomachine Editor. 0.3.5 shortened the save's hold on the audio, but with a factory baseline cached on disk every save still decoded that cache under the lock: 48 to 59 ms in the Machinedrum Editor, 21 to 25 ms in the Monomachine Editor.
+</li>
+<li><b>The Monomachine Editor keeps a machine change</b> (B-027). Choosing another machine for a track on Sound and then editing a step on Sequence used to put the machine back, with every other unsaved kit value. The machine plays the stored kit for about a quarter of a second after the edit; then your edits come back.
+</li>
+<li><b>Picking a pattern after a big SysEx import works</b> (Machinedrum Editor, B-031). The editor no longer queues a status or dump request that is already waiting. A long backlog used to end in a burst of about 200 requests, and the Machinedrum's OS 1.63 loses input when that much arrives while it builds a reply: the pick never reached the machine and some read-backs failed ("Push failed"). 0.3.5's paced import hid it; a long backlog from any other source no longer causes it.
+</li>
+<li><b>A full MIDI queue no longer replays an old event</b> (both editors). A burst of MIDI that filled the plug-in's queue could play an old event again and lose the new one, which could leave a note stuck.
+</li>
+<li><b>The DAW hears the new latency</b> (both editors). After the resampler mode or the sample rate changes, the plug-in tells the host its new latency at once, so delay compensation is right.
+</li>
+<li><b>Windows: closing and reopening the plug-in's window no longer leaves it blank</b> (B-029), and the standalone no longer starts with a blank window when its window is made again while it starts (B-022). The editor makes its web view again in the new window. We could not try this in a real Windows DAW yet; the Windows start test now closes and reopens the editor. If it still happens, send the <code>editor-*.log</code> (<b>Open Log Folder</b>).
+</li>
+<li><b>Windows: the standalone says when a MIDI port did not open</b> (B-037). On Windows a MIDI port works in one program at a time: if a DAW or another editor uses it, the AUDIO / MIDI panel now says which port, why, and to switch it off there. The start-up log lists the audio device and the MIDI ports whenever they change. The Machinedrum Editor's start-up log gets its boot line once a second, as 0.3.5 said, not every 4 s (B-035).
+</li>
+<li><b>A note on MIDI in:</b> in the app no MIDI input is on until you switch it on in <b>AUDIO / MIDI</b>, on every system.
+</li>
+<li><b>macOS: the installer removes the old plug-ins</b> (B-032). It removes the old Gearmulator MD and Gearmulator MM VST3, AU and app bundles, in the install location and in your home folder, so a DAW lists each editor once. It leaves other names and links alone. If your DAW still lists an editor twice, tell us what is in <code>/Library/Audio/Plug-Ins</code> and <code>~/Library/Audio/Plug-Ins</code>.
+</li>
+<li><b>The download page says which file is the installer</b> (B-040): on macOS the big button reads "Download the installer (.pkg)", the .dmg is marked as loose files, and every release's notes on GitHub say it too.
+</li>
+<li><b>The Windows and Linux READMEs send reports to <a href="https://mdmm.dev/contact/">https://mdmm.dev/contact/</a> and Discord (#bugs)</b>, not to GitHub issues, which are off (B-042).
+</li>
+<li><b>Linux: the page stays up</b> (both editors). A window that was not at the design size sent its zoom in a way that crashes WebKitGTK's web process, so a laptop screen below 1440 x 924 could blank the page; it now goes as an ordinary message. A file write that fails no longer freezes the page: it is tried again, in order, and the start-up log says why. A page that starts again shows the questions still waiting. Not tried on a real Linux desktop yet; it may be the blank window one tester saw on 0.3.4 (B-033). If your window is still blank, tell us your distribution and WebKitGTK version.
+</li>
+<li><b>The MCP server only answers your own computer.</b> It is off unless you switch it on. It now listens on 127.0.0.1 only, checks the Host and Origin of every request and sends no CORS headers, so a web page in your browser can no longer call it; it stops at once when the editor closes, and limits the size and number of requests. It still has no password, so leave it off unless you use it.
+</li>
+<li><b>A broken network message ends its connection, not your DAW.</b> In the MCP server and the DSP bridge (upstream's network-DSP feature: its server is a separate program we do not ship; its client is compiled into the plug-ins, but these editors have no switch for it), a malformed or oversized message, or an error on a network thread, now closes that one connection. The bridge server names a ROM it caches by its content only (1 byte to 16 MiB) and no longer takes a path from the other end.
+</li>
+</ul>
+<h2>New</h2>
+<ul>
+<li><b>A notice when the editor runs under Rosetta</b> (both editors, B-043). Testers on M1 Macs see about twice the CPU of M2 Macs. The likely cause is a DAW opened as an Intel app, which runs the whole emulator translated. The editor now says so once a session: "Running under Rosetta" with <b>Don't show again</b> and <b>OK</b> (on Windows on Arm: "Running in emulation"). It replaces the "Rosetta detected" box the editors inherited, which came back every time a window opened and could not be switched off. The performance report and the first line of the start-up log record <code>process_arch</code>, <code>machine_arch</code> and <code>translated</code>, so a report settles it.
+</li>
+<li><b>Drag and drop files onto the window</b> (both editors, macOS only for now). A <b>ROM</b> (<code>.bin</code>, or a <code>.zip</code> with it) installs after a question ("Install ... as the firmware? The machine starts again with it."), at once on the start-up card when no firmware runs yet. A <b>SysEx file</b> (<code>.syx</code>) opens the import window with its preview, as <b>Import SysEx...</b> does; one file a drop. <b>Samples</b> (<code>.wav</code>, <code>.aif</code>, <code>.aiff</code>; Machinedrum Editor, with the Sampler open) go into ROM slots: the one you drop on, or the selected one, then the slots after it, one file at a time, after one question. Anything else is named in a note. While files are over the window, a frame says what it takes. On Windows and Linux a dropped file is not opened; the card says to click the button. New in this release: if a drop is not taken, tell us.
+</li>
+<li><b>The machine's own MIDI out reaches your DAW and the standalone's MIDI output</b> (both editors, B-037). Notes, CCs, program changes, pitch bend and pressure, and clock, start, stop and continue, go where a real machine's MIDI OUT goes. Its SysEx never does: its dumps and answers to the editor must not reach a real Elektron on the port. In a DAW it arrives on the plug-in's MIDI output, which carried none of the machine's MIDI until now. In HW MIDI mode nothing changes.
+</li>
+</ul>
+<h2>Known</h2>
+<ul>
+<li><b>Windows 10: both VST3s stay on the boot screen in Ableton, and the Monomachine standalone crackles</b> (B-035, B-036). Most likely the machine runs below real time on that PC. We need the start-up log: <b>Open Log Folder</b>, <code>editor-*.log</code>, after a minute in the DAW or the app.
+</li>
+<li><b>Machinedrum: changing a machine in the stock patterns</b> (B-039). We could not reproduce a machine change being lost; if it happens to you, tell us the pattern, the kit and what you did.
+</li>
+<li><b>Machinedrum: a pattern pick during a SysEx import asks about unsaved kit edits you never made</b> (B-045). It goes away when the import finishes.
+</li>
+<li><b>Monomachine: in a backup we test with, picking pattern H16 leaves the machine on kit 58, not its linked kit 74</b> (B-046). The firmware decides this; not investigated.
+</li>
+<li><b>Monomachine: a LOOP row in a song written by the editor goes back to row 1</b>, not to the row it names (B-038). The machine plays it so; where it stores the loop target is still to be probed.
+</li>
+<li><b>The update banner still offers Download (the site), never Update.</b> Installing from inside the app waits for our update signing key.
+</li>
+</ul>
+<h2>For developers</h2>
+<ul>
+<li><b>A local release gate.</b> <code>scripts/mdmm-local-gate.sh</code> says red or green for a release candidate on a Mac with the firmware that CI never has (doc/release/LOCAL-GATE.md).
+</li>
+<li><b>CI:</b> the macOS, Windows and core lists name the new tests; Linux fails on a test program that does not build; the integration policy gate of the upstream fork runs only in its own repository.
+</li>
+</ul>
+<h2>Platforms</h2>
+<ul>
+<li>macOS 12 or later (Intel and Apple silicon), not signed by Apple yet: the first install needs <b>Open Anyway</b> (on macOS 12 to 14: right-click the installer &gt; <b>Open</b>).
+</li>
+<li>Windows x64 and Linux x64: not tested by a person yet. Feedback welcome: <a href="https://mdmm.dev/contact/">https://mdmm.dev/contact/</a>
+</li>
+</ul>
+    <p><a href="/releases/">All release notes</a> · <a href="/get/">Download</a></p>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap grid">
+    <p><b>MD + MM Editor</b> <span data-version></span> · Machinedrum Editor and Monomachine Editor<br>A NativeKloud Consulting project — <a href="https://nativekloud.com">nativekloud.com</a></p>
+    <p><b>Free software</b> under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3</a>. <a href="https://github.com/radekdymacz/gearmulator-md-mm">Source</a> · <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases">All releases</a></p>
+    <p><b>Credits.</b> Built on <a href="https://github.com/joelanders/gearmulator-md-mm">gearmulator-md-mm</a> by joelanders (the Machinedrum and Monomachine emulation) and <a href="https://github.com/dsp56300/gearmulator">Gearmulator</a> by The Usual Suspects (dsp56300). Thanks to Elektron for the instruments.</p>
+    <p class="legal"><a href="/guide/">Guide</a> · <a href="/releases/">Release notes</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a> · <a href="/refunds/">Refunds</a> · <a href="/contact/">Contact</a> · <a href="https://discord.gg/8xwXwBHbtn">Discord</a> · <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a></p>
+    <p><b>Trademarks.</b> Elektron, Machinedrum and Monomachine are trademarks of Elektron Music Machines. This project is independent and not affiliated with or endorsed by Elektron, joelanders or The Usual Suspects. No firmware is included. No cookies, no analytics, no third-party scripts.</p>
+  </div>
+</footer>
+
+<script src="/config.js"></script>
+<script src="/assets/main.js?v=20261008" defer></script>
+</body>
+</html>
